@@ -29,6 +29,12 @@ const iphoneEntry: PreviewEntry = {
   orientation: 'portrait',
 };
 
+const ipadEntry: PreviewEntry = {
+  id: 'preview-2',
+  deviceId: 'ipad',
+  orientation: 'portrait',
+};
+
 describe('PreviewInstance', () => {
   beforeEach(() => {
     usePreviewStore.getState().reset();
@@ -156,5 +162,107 @@ describe('PreviewInstance', () => {
       />
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  // --- readOnly URL tests ---
+
+  it('URL input is readOnly in PreviewInstance', () => {
+    render(
+      <PreviewInstance
+        entry={iphoneEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    const input = screen.getByLabelText('Preview URL (read-only)');
+    expect(input).toHaveAttribute('readonly');
+  });
+
+  // --- State independence tests ---
+
+  it('two instances render independently', () => {
+    render(
+      <>
+        <PreviewInstance
+          entry={iphoneEntry}
+          sharedUrl="https://a.example.com"
+          onRemove={vi.fn()}
+        />
+        <PreviewInstance
+          entry={ipadEntry}
+          sharedUrl="https://b.example.com"
+          onRemove={vi.fn()}
+        />
+      </>
+    );
+    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
+    expect(screen.getByText('iPad')).toBeInTheDocument();
+  });
+
+  it('each instance maintains independent zoom controls', () => {
+    render(
+      <>
+        <PreviewInstance
+          entry={iphoneEntry}
+          sharedUrl="https://example.com"
+          onRemove={vi.fn()}
+        />
+        <PreviewInstance
+          entry={ipadEntry}
+          sharedUrl="https://example.com"
+          onRemove={vi.fn()}
+        />
+      </>
+    );
+
+    // Both should have independent zoom controls
+    const zoomInButtons = screen.getAllByLabelText('Zoom in');
+    const zoomOutButtons = screen.getAllByLabelText('Zoom out');
+    expect(zoomInButtons).toHaveLength(2);
+    expect(zoomOutButtons).toHaveLength(2);
+  });
+
+  it('customUrl instance shows custom URL not shared URL', () => {
+    const entryWithCustom: PreviewEntry = {
+      ...iphoneEntry,
+      customUrl: 'https://custom.example.com',
+    };
+
+    render(
+      <PreviewInstance
+        entry={entryWithCustom}
+        sharedUrl="https://shared.example.com"
+        onRemove={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByDisplayValue('https://custom.example.com')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue('https://shared.example.com')
+    ).not.toBeInTheDocument();
+  });
+
+  // --- Lifecycle cleanup test ---
+
+  it('removing an entry does not create orphaned lifecycleStatus', () => {
+    // Add entries to the store
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+
+    // Simulate lifecycle status
+    usePreviewStore.getState().updateLifecycleStatus(id1, 'ready');
+    expect(usePreviewStore.getState().lifecycleStatus[id1]).toBe('ready');
+
+    // Remove the entry
+    usePreviewStore.getState().removeEntry(id1);
+
+    // The lifecycleStatus should be cleaned up by removeEntry
+    expect(usePreviewStore.getState().lifecycleStatus[id1]).toBeUndefined();
+
+    // Verify no orphaned entry was created
+    const allKeys = Object.keys(usePreviewStore.getState().lifecycleStatus);
+    expect(allKeys).not.toContain(id1);
   });
 });

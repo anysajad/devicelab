@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { getDevicesByCategory } from '@/devices';
 import type { DeviceCategory, DeviceDefinition } from '@/devices';
@@ -33,6 +33,11 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
     label: CATEGORY_LABELS[cat],
     devices: getDevicesByCategory(cat),
   })).filter((g) => g.devices.length > 0);
+
+  // Sync local URL input state when sharedUrl changes externally (e.g., from store reset).
+  useEffect(() => {
+    setUrlInput(sharedUrl);
+  }, [sharedUrl]);
 
   const handleSubmitUrl = useCallback(() => {
     setSharedUrl(urlInput);

@@ -30,6 +30,8 @@ interface PreviewToolbarProps {
   hasDevice: boolean;
   /** Optional remove button handler. When provided, a close button is shown. */
   onRemove?: () => void;
+  /** When true, the URL input is read-only (informational display). */
+  readOnly?: boolean;
 }
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
@@ -90,6 +92,7 @@ export function PreviewToolbar({
   lifecycle,
   hasDevice,
   onRemove,
+  readOnly,
 }: PreviewToolbarProps) {
   const grouped = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -121,9 +124,15 @@ export function PreviewToolbar({
         onChange={(e) => onUrlChange(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={onUrlSubmit}
-        placeholder="Enter URL to preview..."
-        className="min-w-[200px] flex-1 rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
-        aria-label="Target URL"
+        readOnly={readOnly}
+        placeholder={readOnly ? undefined : 'Enter URL to preview...'}
+        className={`min-w-[200px] flex-1 rounded-md border px-3 py-1.5 text-sm ${
+          readOnly
+            ? 'cursor-default border-gray-200 bg-gray-50/50 text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400'
+            : 'border-gray-300 bg-gray-50 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500'
+        }`}
+        aria-label={readOnly ? 'Preview URL (read-only)' : 'Target URL'}
+        aria-readonly={readOnly || undefined}
       />
 
       {/* Separator */}

@@ -465,4 +465,196 @@ describe('PreviewWorkspace (multi-device)', () => {
       screen.getByText('Add a device above to start previewing')
     ).toBeInTheDocument();
   });
+
+  // --- Grid/Focus configuration preservation tests ---
+
+  it('grid with multiple entries renders one PreviewInstance per entry', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().addEntry('iphone-15-pro');
+    render(<PreviewWorkspace />);
+
+    // Each entry should have its own device selector
+    const selects = screen.getAllByLabelText('Select device');
+    expect(selects).toHaveLength(3);
+  });
+
+  it('grid mode: each preview has its own controls', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    render(<PreviewWorkspace />);
+
+    // Each should have reload, zoom, etc.
+    const reloadButtons = screen.getAllByLabelText('Reload preview');
+    const zoomInButtons = screen.getAllByLabelText('Zoom in');
+    expect(reloadButtons).toHaveLength(2);
+    expect(zoomInButtons).toHaveLength(2);
+  });
+
+  it('focus mode: only active preview has controls', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+    render(<PreviewWorkspace />);
+
+    // Only one PreviewToolbar (with controls)
+    const toolbars = screen.getAllByLabelText('Preview controls');
+    expect(toolbars).toHaveLength(1);
+
+    // Thumbnails exist but have no controls
+    expect(
+      screen.getByLabelText('iPhone 15 preview (active)')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('iPad preview')).toBeInTheDocument();
+  });
+
+  it('grid → focus → grid preserves device configuration', async () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    const id2 = usePreviewStore.getState().addEntry('ipad');
+
+    // Change device on first entry
+    usePreviewStore.getState().updateEntry(id1, { deviceId: 'iphone-15-pro' });
+
+    render(<PreviewWorkspace />);
+
+    // Verify grid shows updated device
+    expect(screen.getByText('iPhone 15 Pro')).toBeInTheDocument();
+
+    // Switch to focus
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+
+    // Switch back to grid
+    await userEvent.click(screen.getByLabelText('Grid layout'));
+
+    // Verify configuration persisted
+    const entries = usePreviewStore.getState().entries;
+    expect(entries.find((e) => e.id === id1)?.deviceId).toBe('iphone-15-pro');
+    expect(entries.find((e) => e.id === id2)?.deviceId).toBe('ipad');
+  });
+
+  it('grid → focus → grid preserves orientation', async () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().updateEntry(id1, {
+      orientation: 'landscape',
+    });
+
+    render(<PreviewWorkspace />);
+
+    // Switch to focus and back
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+    await userEvent.click(screen.getByLabelText('Grid layout'));
+
+    const entries = usePreviewStore.getState().entries;
+    expect(entries.find((e) => e.id === id1)?.orientation).toBe('landscape');
+  });
+
+  it('grid → focus → grid preserves customUrl', async () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().updateEntry(id1, {
+      customUrl: 'https://custom.example.com',
+    });
+
+    render(<PreviewWorkspace />);
+
+    // Switch to focus and back
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+    await userEvent.click(screen.getByLabelText('Grid layout'));
+
+    const entries = usePreviewStore.getState().entries;
+    expect(entries.find((e) => e.id === id1)?.customUrl).toBe(
+      'https://custom.example.com'
+    );
+  });
+
+  it('removing active entry in focus mode selects next entry', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+
+    render(<PreviewWorkspace />);
+
+    // iPhone 15 should be active
+    expect(
+      screen.getByLabelText('iPhone 15 preview (active)')
+    ).toBeInTheDocument();
+
+    // Remove the active entry
+    await userEvent.click(screen.getByLabelText('Remove preview'));
+
+    // iPad should now be active
+    expect(screen.getByLabelText('iPad preview (active)')).toBeInTheDocument();
+  });
+
+  it('removing last entry shows empty state', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Remove preview'));
+
+    expect(
+      screen.getByText('Add a device above to start previewing')
+    ).toBeInTheDocument();
+  });
+
+  it('shared URL propagation: changes reload non-customUrl previews', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setSharedUrl('https://initial.example.com');
+
+    render(<PreviewWorkspace />);
+
+    // Both should show initial URL in their read-only inputs
+    const inputs = screen.getAllByLabelText('Preview URL (read-only)');
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]).toHaveValue('https://initial.example.com');
+    expect(inputs[1]).toHaveValue('https://initial.example.com');
+
+    // Update shared URL in store
+    usePreviewStore.getState().setSharedUrl('https://updated.example.com');
+
+    // Wait for React to process the update
+    await screen.findAllByDisplayValue('https://updated.example.com');
+
+    // Both should reflect the updated URL
+    const updatedInputs = screen.getAllByLabelText('Preview URL (read-only)');
+    expect(updatedInputs[0]).toHaveValue('https://updated.example.com');
+    expect(updatedInputs[1]).toHaveValue('https://updated.example.com');
+  });
+
+  it('customUrl isolation: customUrl not affected by sharedUrl changes', async () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setSharedUrl('https://initial.example.com');
+    usePreviewStore.getState().updateEntry(id1, {
+      customUrl: 'https://custom.example.com',
+    });
+
+    render(<PreviewWorkspace />);
+
+    // First instance shows custom URL, second shows shared URL
+    const readOnlyInputs = screen.getAllByLabelText('Preview URL (read-only)');
+    expect(readOnlyInputs[0]).toHaveValue('https://custom.example.com');
+    expect(readOnlyInputs[1]).toHaveValue('https://initial.example.com');
+
+    // Update shared URL
+    usePreviewStore.getState().setSharedUrl('https://updated.example.com');
+
+    // Wait for React to process the update
+    await screen.findAllByDisplayValue('https://updated.example.com');
+
+    // First instance still shows custom URL
+    const updatedInputs = screen.getAllByLabelText('Preview URL (read-only)');
+    expect(updatedInputs[0]).toHaveValue('https://custom.example.com');
+    // Second instance shows updated shared URL
+    expect(updatedInputs[1]).toHaveValue('https://updated.example.com');
+  });
+
+  it('desktop device remains landscape-only in controls', () => {
+    usePreviewStore.getState().addEntry('desktop-1080p');
+    render(<PreviewWorkspace />);
+
+    // Portrait should be disabled for desktop
+    const portraitBtn = screen.getByLabelText('Portrait orientation');
+    expect(portraitBtn).toBeDisabled();
+  });
 });

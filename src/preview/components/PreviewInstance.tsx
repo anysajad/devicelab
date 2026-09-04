@@ -88,9 +88,17 @@ export function PreviewInstance({
   }, [state.lifecycle, entry.id, updateLifecycleStatus]);
 
   // Cleanup lifecycle status on unmount.
+  // Only update if the entry still exists in the store.
+  // If the entry was removed by removeEntry(), it already cleaned up
+  // lifecycleStatus — we must not recreate an orphaned entry.
   useEffect(() => {
     return () => {
-      updateLifecycleStatus(entry.id, 'idle');
+      const entryStillExists = usePreviewStore
+        .getState()
+        .entries.some((e) => e.id === entry.id);
+      if (entryStillExists) {
+        updateLifecycleStatus(entry.id, 'idle');
+      }
     };
   }, [entry.id, updateLifecycleStatus]);
 
@@ -147,6 +155,7 @@ export function PreviewInstance({
         lifecycle={state.lifecycle}
         hasDevice={hasDevice}
         onRemove={onRemove ? handleRemove : undefined}
+        readOnly
       />
 
       {/* Preview area */}
