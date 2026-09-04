@@ -174,5 +174,189 @@ describe('usePreviewStore', () => {
       expect(usePreviewStore.getState().layoutMode).toBe('grid');
       expect(usePreviewStore.getState().lifecycleStatus).toEqual({});
     });
+
+    it('clears compareIds', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      usePreviewStore.getState().reset();
+      expect(usePreviewStore.getState().compareIds).toEqual([]);
+    });
+  });
+
+  // --- Comparison tests ---
+
+  describe('setCompareIds', () => {
+    it('sets compare IDs', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id2]);
+    });
+
+    it('filters stale IDs that no longer exist', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, 'stale-id']);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1]);
+    });
+
+    it('removes duplicate IDs', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id1, id1]);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1]);
+    });
+
+    it('preserves stable ordering', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      const id3 = usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().setCompareIds([id3, id1, id2]);
+      expect(usePreviewStore.getState().compareIds).toEqual([id3, id1, id2]);
+    });
+  });
+
+  describe('enterCompareMode', () => {
+    it('does nothing when fewer than 2 entries exist', () => {
+      usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().enterCompareMode();
+      expect(usePreviewStore.getState().layoutMode).toBe('grid');
+      expect(usePreviewStore.getState().compareIds).toEqual([]);
+    });
+
+    it('enters compare mode with first 2 entries when no initialIds', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().enterCompareMode();
+      expect(usePreviewStore.getState().layoutMode).toBe('compare');
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id2]);
+    });
+
+    it('enters compare mode from Focus using activeId + next entry', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().setLayoutMode('focus');
+      usePreviewStore.getState().setActiveId(id1);
+      usePreviewStore.getState().enterCompareMode();
+      expect(usePreviewStore.getState().layoutMode).toBe('compare');
+      expect(usePreviewStore.getState().compareIds).toContain(id1);
+      expect(usePreviewStore.getState().compareIds).toContain(id2);
+    });
+
+    it('enters compare mode with explicit valid IDs', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().enterCompareMode([id1, id2]);
+      expect(usePreviewStore.getState().layoutMode).toBe('compare');
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id2]);
+    });
+
+    it('does not enter compare mode with fewer than 2 valid explicit IDs', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().enterCompareMode([id1, 'stale-id']);
+      expect(usePreviewStore.getState().layoutMode).toBe('grid');
+    });
+  });
+
+  describe('toggleCompareEntry', () => {
+    it('adds entry to compare selection when already in compare mode', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      const id3 = usePreviewStore.getState().addEntry('iphone-15-pro');
+      // Start in compare mode with id1 and id2
+      usePreviewStore.getState().enterCompareMode([id1, id2]);
+      // Toggle third entry in
+      usePreviewStore.getState().toggleCompareEntry(id3);
+      expect(usePreviewStore.getState().compareIds).toContain(id1);
+      expect(usePreviewStore.getState().compareIds).toContain(id2);
+      expect(usePreviewStore.getState().compareIds).toContain(id3);
+    });
+
+    it('removes entry from compare selection', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      const id3 = usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().setCompareIds([id1, id2, id3]);
+      usePreviewStore.getState().toggleCompareEntry(id2);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id3]);
+    });
+
+    it('exits compare mode when fewer than 2 remain', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      usePreviewStore.getState().setLayoutMode('compare');
+      usePreviewStore.getState().toggleCompareEntry(id1);
+      expect(usePreviewStore.getState().layoutMode).toBe('grid');
+      expect(usePreviewStore.getState().compareIds).toEqual([]);
+    });
+  });
+
+  describe('removeEntry with compareIds', () => {
+    it('removes entry from compareIds', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      usePreviewStore.getState().removeEntry(id1);
+      expect(usePreviewStore.getState().compareIds).toEqual([id2]);
+    });
+
+    it('exits compare mode when fewer than 2 entries remain', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      usePreviewStore.getState().setLayoutMode('compare');
+      usePreviewStore.getState().removeEntry(id1);
+      // Exits compare mode (layout changes to grid)
+      expect(usePreviewStore.getState().layoutMode).toBe('grid');
+      // Remaining entry stays in compareIds (preserved for potential re-entry)
+      expect(usePreviewStore.getState().compareIds).toEqual([id2]);
+    });
+
+    it('preserves compareIds when sufficient entries remain', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      const id3 = usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().setCompareIds([id1, id2, id3]);
+      usePreviewStore.getState().setLayoutMode('compare');
+      usePreviewStore.getState().removeEntry(id1);
+      expect(usePreviewStore.getState().layoutMode).toBe('compare');
+      expect(usePreviewStore.getState().compareIds).toEqual([id2, id3]);
+    });
+  });
+
+  describe('activeId independence', () => {
+    it('activeId remains independent from compareIds', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      const id3 = usePreviewStore.getState().addEntry('iphone-15-pro');
+      usePreviewStore.getState().setActiveId(id3);
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      expect(usePreviewStore.getState().activeId).toBe(id3);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id2]);
+    });
+
+    it('changing activeId does not affect compareIds', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setCompareIds([id1, id2]);
+      usePreviewStore.getState().setActiveId(id1);
+      usePreviewStore.getState().setActiveId(id2);
+      expect(usePreviewStore.getState().compareIds).toEqual([id1, id2]);
+    });
+
+    it('toggling compare does not affect activeId', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setActiveId(id1);
+      usePreviewStore.getState().toggleCompareEntry(id1);
+      usePreviewStore.getState().toggleCompareEntry(id2);
+      expect(usePreviewStore.getState().activeId).toBe(id1);
+    });
   });
 });

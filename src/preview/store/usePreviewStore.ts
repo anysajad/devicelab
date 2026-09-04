@@ -14,6 +14,28 @@ function generateId(): PreviewInstanceId {
   return `preview-${nextId++}`;
 }
 
+/**
+ * Sanitize an array of preview IDs:
+ * - Remove IDs that no longer exist in entries
+ * - Remove duplicates
+ * - Preserve stable ordering (maintain order from entries)
+ */
+function sanitizeCompareIds(
+  ids: PreviewInstanceId[],
+  entries: PreviewEntry[]
+): PreviewInstanceId[] {
+  const entryIds = new Set(entries.map((e) => e.id));
+  const seen = new Set<PreviewInstanceId>();
+  const result: PreviewInstanceId[] = [];
+  for (const id of ids) {
+    if (entryIds.has(id) && !seen.has(id)) {
+      result.push(id);
+      seen.add(id);
+    }
+  }
+  return result;
+}
+
 export interface PreviewCollectionState {
   /** Ordered list of preview entries. */
   entries: PreviewEntry[];
@@ -23,6 +45,8 @@ export interface PreviewCollectionState {
   activeId: PreviewInstanceId | null;
   /** Current layout mode. */
   layoutMode: LayoutMode;
+  /** Entry IDs selected for comparison. Only meaningful in compare mode. */
+  compareIds: PreviewInstanceId[];
   /** Lightweight lifecycle status per entry, updated by PreviewInstance. */
   lifecycleStatus: Record<PreviewInstanceId, PreviewLifecycle>;
 }
@@ -63,6 +87,17 @@ export interface PreviewCollectionActions {
   ) => void;
   /** Reset to clean initial state. */
   reset: () => void;
+
+  // --- Comparison actions ---
+
+  /** Set compare IDs directly. Stale/duplicate IDs are sanitized. */
+  setCompareIds: (ids: PreviewInstanceId[]) => void;
+  /** Toggle an entry in/out of the comparison set. */
+  toggleCompareEntry: (id: PreviewInstanceId) => void;
+  /** Enter compare mode with an optional initial selection. */
+  enterCompareMode: (initialIds?: PreviewInstanceId[]) => void;
+  /** Exit compare mode and clear selection. */
+  exitCompareMode: () => void;
 }
 
 const INITIAL_STATE: PreviewCollectionState = {
@@ -70,6 +105,7 @@ const INITIAL_STATE: PreviewCollectionState = {
   sharedUrl: '',
   activeId: null,
   layoutMode: 'grid',
+  compareIds: [],
   lifecycleStatus: {},
 };
 
@@ -106,10 +142,21 @@ export const usePreviewStore = create<
         newActiveId = newEntries.length > 0 ? newEntries[0]!.id : null;
       }
 
+      // Clean up compareIds — remove the deleted entry
+      const newCompareIds = state.compareIds.filter((cid) => cid !== id);
+
+      // If compare mode now has fewer than 2 selected entries, exit compare mode
+      let newLayoutMode = state.layoutMode;
+      if (newLayoutMode === 'compare' && newCompareIds.length < 2) {
+        newLayoutMode = 'grid';
+      }
+
       return {
         entries: newEntries,
         activeId: newActiveId,
         lifecycleStatus: newLifecycleStatus,
+        compareIds: newCompareIds,
+        layoutMode: newLayoutMode,
       };
     });
   },
@@ -146,5 +193,76 @@ export const usePreviewStore = create<
 
   reset: () => {
     set(INITIAL_STATE);
+  },
+
+  // --- Comparison actions ---
+
+  setCompareIds: (ids) => {
+    set((state) => ({
+      compareIds: sanitizeCompareIds(ids, state.entries),
+    }));
+  },
+
+  toggleCompareEntry: (id) => {
+    set((state) => {
+      const isCurrentlySelected = state.compareIds.includes(id);
+      let newCompareIds: PreviewInstanceId[];
+
+      if (isCurrentlySelected) {
+        newCompareIds = state.compareIds.filter((cid) => cid !== id);
+      } else {
+        newCompareIds = [...state.compareIds, id];
+      }
+
+      newCompareIds = sanitizeCompareIds(newCompareIds, state.entries);
+
+      // If fewer than 2 entries remain selected, exit compare mode
+      if (newCompareIds.length < 2) {
+        return {
+          compareIds: [],
+          layoutMode: 'grid',
+        };
+      }
+
+      return { compareIds: newCompareIds };
+    });
+  },
+
+  enterCompareMode: (initialIds) => {
+    set((state) => {
+      // Need at least 2 entries to compare
+      if (state.entries.length < 2) return state;
+
+      let selectedIds: PreviewInstanceId[];
+
+      if (initialIds && initialIds.length > 0) {
+        selectedIds = sanitizeCompareIds(initialIds, state.entries);
+      } else if (state.layoutMode === 'focus' && state.activeId) {
+        // From Focus: use activeId plus the next available entry
+        const nextEntry = state.entries.find((e) => e.id !== state.activeId);
+        selectedIds = nextEntry
+          ? [state.activeId, nextEntry.id]
+          : [state.activeId];
+        selectedIds = sanitizeCompareIds(selectedIds, state.entries);
+      } else {
+        // From Grid or other: use the first two entries
+        selectedIds = state.entries.slice(0, 2).map((e) => e.id);
+      }
+
+      // Need at least 2 valid entries to enter compare mode
+      if (selectedIds.length < 2) return state;
+
+      return {
+        layoutMode: 'compare' as const,
+        compareIds: selectedIds,
+      };
+    });
+  },
+
+  exitCompareMode: () => {
+    set({
+      layoutMode: 'grid',
+      compareIds: [],
+    });
   },
 }));

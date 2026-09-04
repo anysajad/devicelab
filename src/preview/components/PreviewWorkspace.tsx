@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 
 import { usePreviewStore } from '../store/usePreviewStore';
+import { CompareThumbnail } from './CompareThumbnail';
 import { PreviewInstance } from './PreviewInstance';
 import { PreviewThumbnail } from './PreviewThumbnail';
 import { WorkspaceToolbar } from './WorkspaceToolbar';
@@ -10,9 +11,11 @@ export function PreviewWorkspace() {
   const sharedUrl = usePreviewStore((s) => s.sharedUrl);
   const activeId = usePreviewStore((s) => s.activeId);
   const layoutMode = usePreviewStore((s) => s.layoutMode);
+  const compareIds = usePreviewStore((s) => s.compareIds);
   const lifecycleStatus = usePreviewStore((s) => s.lifecycleStatus);
   const removeEntry = usePreviewStore((s) => s.removeEntry);
   const setActiveId = usePreviewStore((s) => s.setActiveId);
+  const toggleCompareEntry = usePreviewStore((s) => s.toggleCompareEntry);
 
   const hasEntries = entries.length > 0;
 
@@ -43,6 +46,10 @@ export function PreviewWorkspace() {
   // Get the active entry for focus mode
   const activeEntry =
     activeId != null ? entries.find((e) => e.id === activeId) : null;
+
+  // Get entries for compare mode
+  const compareEntrySet = new Set(compareIds);
+  const compareEntries = entries.filter((e) => compareEntrySet.has(e.id));
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -118,6 +125,42 @@ export function PreviewWorkspace() {
                 isActive={entry.id === activeId}
                 lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
                 onClick={() => handleThumbnailClick(entry.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Compare mode */}
+      {hasEntries && layoutMode === 'compare' && (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Comparison grid — responsive, scrollable */}
+          <div className="flex flex-1 overflow-auto p-4">
+            <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 content-start">
+              {compareEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+                >
+                  <PreviewInstance
+                    entry={entry}
+                    sharedUrl={sharedUrl}
+                    onRemove={handleRemove}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Thumbnail strip — select/deselect for comparison */}
+          <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+            {entries.map((entry) => (
+              <CompareThumbnail
+                key={entry.id}
+                entry={entry}
+                isSelected={compareEntrySet.has(entry.id)}
+                lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
+                onToggle={() => toggleCompareEntry(entry.id)}
               />
             ))}
           </div>

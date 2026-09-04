@@ -74,7 +74,7 @@ export interface PreviewController {
 export type PreviewInstanceId = string;
 
 /** Layout mode for the multi-device workspace. */
-export type LayoutMode = 'grid' | 'focus';
+export type LayoutMode = 'grid' | 'focus' | 'compare';
 
 /**
  * Sentinel device ID for custom viewport entries.
