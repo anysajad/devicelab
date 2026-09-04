@@ -39,7 +39,15 @@ export interface PreviewCollectionActions {
   updateEntry: (
     id: PreviewInstanceId,
     updates: Partial<
-      Pick<PreviewEntry, 'deviceId' | 'orientation' | 'customUrl'>
+      Pick<
+        PreviewEntry,
+        | 'deviceId'
+        | 'orientation'
+        | 'customUrl'
+        | 'viewportMode'
+        | 'customViewportWidth'
+        | 'customViewportHeight'
+      >
     >
   ) => void;
   /** Set the active preview for focus mode. */

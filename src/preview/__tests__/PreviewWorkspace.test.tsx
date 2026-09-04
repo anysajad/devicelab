@@ -105,9 +105,9 @@ describe('PreviewToolbar', () => {
     expect(labels).toContain('Tablets');
     expect(labels).toContain('Desktops');
 
-    // Check total options = 13 devices + 1 placeholder
+    // Check total options = 13 devices + 1 placeholder + 1 custom
     const options = select.querySelectorAll('option');
-    expect(options.length).toBe(14); // 13 devices + "Select device..."
+    expect(options.length).toBe(15); // 13 devices + "Select device..." + "Custom viewport..."
   });
 
   it('calls onDeviceChange when device selector changes', async () => {
@@ -367,9 +367,11 @@ describe('PreviewWorkspace (multi-device)', () => {
     usePreviewStore.getState().addEntry('iphone-15');
     usePreviewStore.getState().addEntry('ipad');
     render(<PreviewWorkspace />);
-    // Both devices should appear
-    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
-    expect(screen.getByText('iPad')).toBeInTheDocument();
+    // Both devices should appear as select values
+    const selects = screen.getAllByLabelText('Select device');
+    expect(selects).toHaveLength(2);
+    expect(selects[0]).toHaveValue('iphone-15');
+    expect(selects[1]).toHaveValue('ipad');
   });
 
   it('renders only active instance in focus mode', () => {
@@ -431,7 +433,8 @@ describe('PreviewWorkspace (multi-device)', () => {
     usePreviewStore.getState().addEntry('iphone-15');
     render(<PreviewWorkspace />);
     // Should render the preview with device controls
-    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
+    const select = screen.getByLabelText('Select device');
+    expect(select).toHaveValue('iphone-15');
     expect(screen.getByLabelText('Reload preview')).toBeInTheDocument();
   });
 
@@ -517,8 +520,9 @@ describe('PreviewWorkspace (multi-device)', () => {
 
     render(<PreviewWorkspace />);
 
-    // Verify grid shows updated device
-    expect(screen.getByText('iPhone 15 Pro')).toBeInTheDocument();
+    // Verify grid shows updated device via select value
+    const selects = screen.getAllByLabelText('Select device');
+    expect(selects[0]).toHaveValue('iphone-15-pro');
 
     // Switch to focus
     await userEvent.click(screen.getByLabelText('Focus layout'));
@@ -656,5 +660,123 @@ describe('PreviewWorkspace (multi-device)', () => {
     // Portrait should be disabled for desktop
     const portraitBtn = screen.getByLabelText('Portrait orientation');
     expect(portraitBtn).toBeDisabled();
+  });
+
+  // --- Custom viewport tests ---
+
+  it('custom viewport entry renders width/height inputs', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore
+      .getState()
+      .updateEntry(usePreviewStore.getState().entries[0]!.id, {
+        viewportMode: 'custom',
+        deviceId: '__custom__',
+        customViewportWidth: 1024,
+        customViewportHeight: 768,
+      });
+
+    render(<PreviewWorkspace />);
+
+    expect(screen.getByLabelText('Custom viewport width')).toHaveValue('1024');
+    expect(screen.getByLabelText('Custom viewport height')).toHaveValue('768');
+  });
+
+  it('custom viewport orientation controls are disabled', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore
+      .getState()
+      .updateEntry(usePreviewStore.getState().entries[0]!.id, {
+        viewportMode: 'custom',
+        deviceId: '__custom__',
+        customViewportWidth: 1024,
+        customViewportHeight: 768,
+      });
+
+    render(<PreviewWorkspace />);
+
+    expect(screen.getByLabelText('Portrait orientation')).toBeDisabled();
+    expect(screen.getByLabelText('Landscape orientation')).toBeDisabled();
+  });
+
+  it('grid → focus → grid preserves custom viewport dimensions', async () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().updateEntry(id1, {
+      viewportMode: 'custom',
+      deviceId: '__custom__',
+      customViewportWidth: 1024,
+      customViewportHeight: 768,
+    });
+
+    render(<PreviewWorkspace />);
+
+    // Verify custom dimensions
+    expect(screen.getByLabelText('Custom viewport width')).toHaveValue('1024');
+
+    // Switch to focus and back
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+    await userEvent.click(screen.getByLabelText('Grid layout'));
+
+    // Verify dimensions preserved
+    expect(screen.getByLabelText('Custom viewport width')).toHaveValue('1024');
+    expect(screen.getByLabelText('Custom viewport height')).toHaveValue('768');
+  });
+
+  it('custom option appears in device selector', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    const select = screen.getByLabelText('Select device');
+    const customOption = select.querySelector('option[value="__custom__"]');
+    expect(customOption).toBeInTheDocument();
+    expect(customOption).toHaveTextContent('Custom viewport...');
+  });
+
+  it('custom thumbnail shows Custom W × H', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore
+      .getState()
+      .updateEntry(usePreviewStore.getState().entries[0]!.id, {
+        viewportMode: 'custom',
+        deviceId: '__custom__',
+        customViewportWidth: 1024,
+        customViewportHeight: 768,
+      });
+    usePreviewStore.getState().setLayoutMode('focus');
+
+    render(<PreviewWorkspace />);
+
+    // Custom thumbnail should show Custom W × H
+    expect(
+      screen.getByLabelText('Custom 1024 × 768 preview (active)')
+    ).toBeInTheDocument();
+    // iPad thumbnail should still work
+    expect(screen.getByLabelText('iPad preview')).toBeInTheDocument();
+  });
+
+  it('two custom previews remain independent', () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    const id2 = usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().updateEntry(id1, {
+      viewportMode: 'custom',
+      deviceId: '__custom__',
+      customViewportWidth: 1024,
+      customViewportHeight: 768,
+    });
+    usePreviewStore.getState().updateEntry(id2, {
+      viewportMode: 'custom',
+      deviceId: '__custom__',
+      customViewportWidth: 800,
+      customViewportHeight: 600,
+    });
+
+    render(<PreviewWorkspace />);
+
+    const widthInputs = screen.getAllByLabelText('Custom viewport width');
+    const heightInputs = screen.getAllByLabelText('Custom viewport height');
+    expect(widthInputs).toHaveLength(2);
+    expect(heightInputs).toHaveLength(2);
+    expect(widthInputs[0]).toHaveValue('1024');
+    expect(widthInputs[1]).toHaveValue('800');
   });
 });

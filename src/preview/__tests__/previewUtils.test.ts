@@ -9,6 +9,9 @@ import {
   computeSafeArea,
   computeViewport,
   computeZoom,
+  CUSTOM_VIEWPORT_MAX,
+  CUSTOM_VIEWPORT_MIN,
+  parseCustomViewport,
   resolveOrientation,
   sanitizeUrl,
   ZOOM_MAX,
@@ -304,5 +307,69 @@ describe('zoom constants', () => {
 
   it('ZOOM_STEP is 0.1', () => {
     expect(ZOOM_STEP).toBe(0.1);
+  });
+});
+
+describe('parseCustomViewport', () => {
+  it('parses valid integer', () => {
+    expect(parseCustomViewport('1024')).toBe(1024);
+  });
+
+  it('parses minimum value', () => {
+    expect(parseCustomViewport('100')).toBe(100);
+  });
+
+  it('parses maximum value', () => {
+    expect(parseCustomViewport('4000')).toBe(4000);
+  });
+
+  it('rejects decimal values', () => {
+    expect(parseCustomViewport('1024.5')).toBeNull();
+  });
+
+  it('rejects empty string', () => {
+    expect(parseCustomViewport('')).toBeNull();
+  });
+
+  it('rejects whitespace-only string', () => {
+    expect(parseCustomViewport('   ')).toBeNull();
+  });
+
+  it('rejects non-numeric input', () => {
+    expect(parseCustomViewport('abc')).toBeNull();
+  });
+
+  it('rejects below minimum', () => {
+    expect(parseCustomViewport('99')).toBeNull();
+  });
+
+  it('rejects above maximum', () => {
+    expect(parseCustomViewport('4001')).toBeNull();
+  });
+
+  it('rejects negative values', () => {
+    expect(parseCustomViewport('-100')).toBeNull();
+  });
+
+  it('rejects zero', () => {
+    expect(parseCustomViewport('0')).toBeNull();
+  });
+
+  it('rejects scientific notation', () => {
+    expect(parseCustomViewport('1e3')).toBeNull();
+  });
+
+  it('trims whitespace from valid input', () => {
+    expect(parseCustomViewport('  1024  ')).toBe(1024);
+  });
+});
+
+describe('custom viewport constants', () => {
+  it('CUSTOM_VIEWPORT_MIN is 100', () => {
+    expect(CUSTOM_VIEWPORT_MIN).toBe(100);
+  });
+
+  it('CUSTOM_VIEWPORT_MAX is 4000', () => {
+    expect(CUSTOM_VIEWPORT_MAX).toBe(4000);
   });
 });

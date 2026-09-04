@@ -76,6 +76,16 @@ export type PreviewInstanceId = string;
 /** Layout mode for the multi-device workspace. */
 export type LayoutMode = 'grid' | 'focus';
 
+/**
+ * Sentinel device ID for custom viewport entries.
+ * getDeviceById(CUSTOM_DEVICE_ID) returns undefined — PreviewInstance
+ * detects this and creates a synthetic DeviceDefinition.
+ */
+export const CUSTOM_DEVICE_ID = '__custom__' as const;
+
+/** Viewport mode: preset uses Device Registry, custom uses user-specified dimensions. */
+export type ViewportMode = 'preset' | 'custom';
+
 /** A single preview entry in the workspace collection. */
 export interface PreviewEntry {
   readonly id: PreviewInstanceId;
@@ -83,4 +93,10 @@ export interface PreviewEntry {
   readonly orientation: DeviceOrientation;
   /** If set, overrides the workspace shared URL for this preview. */
   readonly customUrl?: string;
+  /** Viewport mode: 'preset' uses Device Registry, 'custom' uses explicit dimensions. */
+  readonly viewportMode?: ViewportMode;
+  /** Custom viewport width in CSS pixels (only used when viewportMode === 'custom'). */
+  readonly customViewportWidth?: number;
+  /** Custom viewport height in CSS pixels (only used when viewportMode === 'custom'). */
+  readonly customViewportHeight?: number;
 }

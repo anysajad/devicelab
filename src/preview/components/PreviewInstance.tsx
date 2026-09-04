@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import type { DeviceDefinition, DeviceOrientation } from '@/devices';
 import { getDeviceById } from '@/devices';
 import { ZOOM_MAX, ZOOM_MIN } from '../previewUtils';
 import { usePreview } from '../usePreview';
 import { usePreviewStore } from '../store/usePreviewStore';
+import { CUSTOM_DEVICE_ID } from '../types';
 import type { PreviewEntry } from '../types';
 import { PreviewFrame } from './PreviewFrame';
 import { PreviewToolbar } from './PreviewToolbar';
@@ -12,6 +14,38 @@ interface PreviewInstanceProps {
   entry: PreviewEntry;
   sharedUrl: string;
   onRemove?: (id: string) => void;
+}
+
+/**
+ * Determine the natural orientation of a custom viewport.
+ * width > height → landscape, otherwise portrait.
+ */
+function resolveCustomOrientation(
+  width: number,
+  height: number
+): DeviceOrientation {
+  return width > height ? 'landscape' : 'portrait';
+}
+
+/**
+ * Create a synthetic DeviceDefinition for custom viewports.
+ * This object satisfies the PreviewEngine's PreviewConfig requirement
+ * without duplicating Device Registry logic.
+ */
+function createSyntheticDevice(
+  width: number,
+  height: number
+): DeviceDefinition {
+  return {
+    id: CUSTOM_DEVICE_ID,
+    name: `Custom ${width} × ${height}`,
+    manufacturer: 'Custom',
+    category: 'custom',
+    viewport: { width, height },
+    devicePixelRatio: 1,
+    safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+    orientations: ['portrait', 'landscape'],
+  };
 }
 
 /**
@@ -31,52 +65,90 @@ export function PreviewInstance({
   const updateEntry = usePreviewStore((s) => s.updateEntry);
   const updateLifecycleStatus = usePreviewStore((s) => s.updateLifecycleStatus);
 
-  const device = getDeviceById(entry.deviceId);
+  const isCustomViewport = entry.viewportMode === 'custom';
+  const device = isCustomViewport
+    ? null
+    : (getDeviceById(entry.deviceId) ?? null);
+
+  // Resolve the effective device: real from registry or synthetic for custom.
+  const effectiveDevice: DeviceDefinition | null = isCustomViewport
+    ? createSyntheticDevice(
+        entry.customViewportWidth ?? 375,
+        entry.customViewportHeight ?? 667
+      )
+    : device;
+
   const effectiveUrl = entry.customUrl ?? sharedUrl;
 
-  const {
-    state,
-    containerRef,
-    controller,
-    reload,
-    zoomIn,
-    zoomOut,
-    fitToContainer,
-  } = usePreview();
+  const { state, containerRef, reload, zoomIn, zoomOut, fitToContainer } =
+    usePreview();
 
-  const hasDevice = device !== undefined;
+  const hasDevice = effectiveDevice !== null;
 
   // Track what we've loaded to avoid unnecessary controller.load() calls.
   const loadedConfigRef = useRef<{
     url: string;
+    viewportMode: string;
     deviceId: string;
     orientation: string;
+    customWidth: number | undefined;
+    customHeight: number | undefined;
   } | null>(null);
 
-  // Load when effective URL, device, or orientation actually changes.
+  const { controller } = usePreview();
+
+  // Load when effective configuration actually changes.
   useEffect(() => {
-    if (!device) return;
+    if (!effectiveDevice) return;
+
+    const viewportMode = entry.viewportMode ?? 'preset';
+
+    // For custom viewports, resolve orientation from the dimensions themselves.
+    // This ensures 1024×768 stays exactly 1024×768 regardless of any stale
+    // entry.orientation value from a previous preset.
+    const orientation: DeviceOrientation = isCustomViewport
+      ? resolveCustomOrientation(
+          entry.customViewportWidth ?? 375,
+          entry.customViewportHeight ?? 667
+        )
+      : entry.orientation;
 
     const prev = loadedConfigRef.current;
     const changed =
       !prev ||
       prev.url !== effectiveUrl ||
+      prev.viewportMode !== viewportMode ||
       prev.deviceId !== entry.deviceId ||
-      prev.orientation !== entry.orientation;
+      prev.orientation !== orientation ||
+      prev.customWidth !== entry.customViewportWidth ||
+      prev.customHeight !== entry.customViewportHeight;
 
     if (changed) {
       controller.load({
         url: effectiveUrl,
-        device,
-        orientation: entry.orientation,
+        device: effectiveDevice,
+        orientation,
       });
       loadedConfigRef.current = {
         url: effectiveUrl,
+        viewportMode,
         deviceId: entry.deviceId,
-        orientation: entry.orientation,
+        orientation,
+        customWidth: entry.customViewportWidth,
+        customHeight: entry.customViewportHeight,
       };
     }
-  }, [effectiveUrl, entry.deviceId, entry.orientation, device, controller]);
+  }, [
+    effectiveUrl,
+    entry.deviceId,
+    entry.orientation,
+    entry.viewportMode,
+    entry.customViewportWidth,
+    entry.customViewportHeight,
+    effectiveDevice,
+    controller,
+    isCustomViewport,
+  ]);
 
   // Sync lifecycle status to the store for thumbnails.
   const prevLifecycleRef = useRef(state.lifecycle);
@@ -104,14 +176,43 @@ export function PreviewInstance({
 
   const handleDeviceChange = useCallback(
     (deviceId: string) => {
-      updateEntry(entry.id, { deviceId });
+      if (deviceId === CUSTOM_DEVICE_ID) {
+        // Switching to custom mode
+        updateEntry(entry.id, {
+          viewportMode: 'custom',
+          deviceId: CUSTOM_DEVICE_ID,
+          customViewportWidth: entry.customViewportWidth ?? 375,
+          customViewportHeight: entry.customViewportHeight ?? 667,
+        });
+      } else {
+        // Switching to a preset device
+        updateEntry(entry.id, {
+          viewportMode: 'preset',
+          deviceId,
+        });
+      }
     },
-    [entry.id, updateEntry]
+    [
+      entry.id,
+      entry.customViewportWidth,
+      entry.customViewportHeight,
+      updateEntry,
+    ]
   );
 
   const handleOrientationChange = useCallback(
     (orientation: 'portrait' | 'landscape') => {
       updateEntry(entry.id, { orientation });
+    },
+    [entry.id, updateEntry]
+  );
+
+  const handleCustomViewportChange = useCallback(
+    (width: number, height: number) => {
+      updateEntry(entry.id, {
+        customViewportWidth: width,
+        customViewportHeight: height,
+      });
     },
     [entry.id, updateEntry]
   );
@@ -124,7 +225,12 @@ export function PreviewInstance({
   const canZoomOut = state.effectiveZoom > ZOOM_MIN;
   const hasLoaded = state.lifecycle !== 'idle';
 
-  if (!hasDevice) return null;
+  // Determine the display name for the frame label.
+  const deviceName = isCustomViewport
+    ? `Custom ${entry.customViewportWidth ?? 0} × ${entry.customViewportHeight ?? 0}`
+    : (effectiveDevice?.name ?? 'Unknown');
+
+  if (!hasDevice || !effectiveDevice) return null;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -139,7 +245,7 @@ export function PreviewInstance({
         selectedDeviceId={entry.deviceId}
         onDeviceChange={handleDeviceChange}
         orientation={entry.orientation}
-        supportedOrientations={device.orientations}
+        supportedOrientations={effectiveDevice.orientations}
         onOrientationChange={handleOrientationChange}
         onReload={reload}
         onZoomIn={zoomIn}
@@ -151,11 +257,15 @@ export function PreviewInstance({
         canZoomOut={canZoomOut}
         viewportWidth={state.viewport.width}
         viewportHeight={state.viewport.height}
-        devicePixelRatio={device.devicePixelRatio}
+        devicePixelRatio={effectiveDevice.devicePixelRatio}
         lifecycle={state.lifecycle}
         hasDevice={hasDevice}
         onRemove={onRemove ? handleRemove : undefined}
         readOnly
+        isCustomViewport={isCustomViewport}
+        customViewportWidth={entry.customViewportWidth}
+        customViewportHeight={entry.customViewportHeight}
+        onCustomViewportChange={handleCustomViewportChange}
       />
 
       {/* Preview area */}
@@ -224,7 +334,7 @@ export function PreviewInstance({
             viewport={state.viewport}
             effectiveZoom={state.effectiveZoom}
             safeArea={state.safeArea}
-            deviceName={device.name}
+            deviceName={deviceName}
           />
         )}
       </div>

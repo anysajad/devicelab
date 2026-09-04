@@ -1,9 +1,17 @@
+import { useCallback, useEffect, useState } from 'react';
+
 import { getDevicesByCategory } from '@/devices';
 import type {
   DeviceCategory,
   DeviceDefinition,
   DeviceOrientation,
 } from '@/devices';
+import {
+  CUSTOM_VIEWPORT_MAX,
+  CUSTOM_VIEWPORT_MIN,
+  parseCustomViewport,
+} from '../previewUtils';
+import { CUSTOM_DEVICE_ID } from '../types';
 import type { PreviewLifecycle, ZoomMode } from '../types';
 
 interface PreviewToolbarProps {
@@ -32,6 +40,14 @@ interface PreviewToolbarProps {
   onRemove?: () => void;
   /** When true, the URL input is read-only (informational display). */
   readOnly?: boolean;
+  /** When true, the preview uses custom viewport dimensions. */
+  isCustomViewport?: boolean;
+  /** Custom viewport width (only used when isCustomViewport is true). */
+  customViewportWidth?: number;
+  /** Custom viewport height (only used when isCustomViewport is true). */
+  customViewportHeight?: number;
+  /** Called when custom viewport dimensions are committed. */
+  onCustomViewportChange?: (width: number, height: number) => void;
 }
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
@@ -93,6 +109,10 @@ export function PreviewToolbar({
   hasDevice,
   onRemove,
   readOnly,
+  isCustomViewport = false,
+  customViewportWidth,
+  customViewportHeight,
+  onCustomViewportChange,
 }: PreviewToolbarProps) {
   const grouped = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -100,8 +120,35 @@ export function PreviewToolbar({
     devices: getDevicesByCategory(cat),
   })).filter((g) => g.devices.length > 0);
 
-  const portraitEnabled = supportedOrientations.includes('portrait');
-  const landscapeEnabled = supportedOrientations.includes('landscape');
+  // Local draft state for custom viewport dimensions.
+  // Committed to store on blur/Enter via onCustomViewportChange.
+  const [draftWidth, setDraftWidth] = useState(
+    () => customViewportWidth?.toString() ?? ''
+  );
+  const [draftHeight, setDraftHeight] = useState(
+    () => customViewportHeight?.toString() ?? ''
+  );
+
+  // Sync draft state when entry changes externally (e.g., preset → custom switch).
+  useEffect(() => {
+    setDraftWidth(customViewportWidth?.toString() ?? '');
+    setDraftHeight(customViewportHeight?.toString() ?? '');
+  }, [customViewportWidth, customViewportHeight]);
+
+  const commitCustomViewport = useCallback(() => {
+    if (!onCustomViewportChange) return;
+    const w = parseCustomViewport(draftWidth);
+    const h = parseCustomViewport(draftHeight);
+    // Only commit if both are valid. Invalid input preserves the last valid stored value.
+    if (w !== null && h !== null) {
+      onCustomViewportChange(w, h);
+    }
+  }, [draftWidth, draftHeight, onCustomViewportChange]);
+
+  const portraitEnabled =
+    !isCustomViewport && supportedOrientations.includes('portrait');
+  const landscapeEnabled =
+    !isCustomViewport && supportedOrientations.includes('landscape');
 
   const zoomPercent = Math.round(effectiveZoom * 100);
   const isFitMode = zoomMode === 'fit';
@@ -109,6 +156,12 @@ export function PreviewToolbar({
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       onUrlSubmit();
+    }
+  }
+
+  function handleCustomKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      commitCustomViewport();
     }
   }
 
@@ -141,7 +194,7 @@ export function PreviewToolbar({
         aria-hidden="true"
       />
 
-      {/* Device selector */}
+      {/* Device selector with Custom option */}
       <select
         value={selectedDeviceId}
         onChange={(e) => onDeviceChange(e.target.value)}
@@ -158,29 +211,84 @@ export function PreviewToolbar({
             ))}
           </optgroup>
         ))}
+        <option value={CUSTOM_DEVICE_ID}>Custom viewport...</option>
       </select>
+
+      {/* Custom viewport width/height inputs */}
+      {isCustomViewport && (
+        <>
+          <div className="flex items-center gap-1">
+            <label
+              htmlFor="custom-viewport-width"
+              className="text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              W:
+            </label>
+            <input
+              id="custom-viewport-width"
+              type="text"
+              inputMode="numeric"
+              value={draftWidth}
+              onChange={(e) => setDraftWidth(e.target.value)}
+              onKeyDown={handleCustomKeyDown}
+              onBlur={commitCustomViewport}
+              placeholder={`${CUSTOM_VIEWPORT_MIN}–${CUSTOM_VIEWPORT_MAX}`}
+              className="w-20 rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs tabular-nums text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              aria-label="Custom viewport width"
+            />
+            <span className="text-xs text-gray-400 dark:text-gray-500">×</span>
+            <label
+              htmlFor="custom-viewport-height"
+              className="text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              H:
+            </label>
+            <input
+              id="custom-viewport-height"
+              type="text"
+              inputMode="numeric"
+              value={draftHeight}
+              onChange={(e) => setDraftHeight(e.target.value)}
+              onKeyDown={handleCustomKeyDown}
+              onBlur={commitCustomViewport}
+              placeholder={`${CUSTOM_VIEWPORT_MIN}–${CUSTOM_VIEWPORT_MAX}`}
+              className="w-20 rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-xs tabular-nums text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              aria-label="Custom viewport height"
+            />
+          </div>
+        </>
+      )}
 
       {/* Orientation toggle */}
       <div
         className="flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700"
         role="group"
-        aria-label="Orientation"
+        aria-label={
+          isCustomViewport
+            ? 'Orientation (not applicable for custom viewports)'
+            : 'Orientation'
+        }
       >
         <button
           type="button"
           onClick={() => onOrientationChange('portrait')}
           disabled={!portraitEnabled || !hasDevice}
           className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            orientation === 'portrait' && hasDevice
+            orientation === 'portrait' && hasDevice && !isCustomViewport
               ? 'bg-brand-500 text-white'
               : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
           } ${
-            !portraitEnabled || !hasDevice
+            !portraitEnabled || !hasDevice || isCustomViewport
               ? 'cursor-not-allowed opacity-50'
               : ''
           }`}
           aria-label="Portrait orientation"
-          aria-pressed={orientation === 'portrait'}
+          aria-pressed={orientation === 'portrait' && !isCustomViewport}
+          title={
+            isCustomViewport
+              ? 'Orientation is not applicable for custom viewports'
+              : undefined
+          }
         >
           P
         </button>
@@ -189,16 +297,21 @@ export function PreviewToolbar({
           onClick={() => onOrientationChange('landscape')}
           disabled={!landscapeEnabled || !hasDevice}
           className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            orientation === 'landscape' && hasDevice
+            orientation === 'landscape' && hasDevice && !isCustomViewport
               ? 'bg-brand-500 text-white'
               : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
           } ${
-            !landscapeEnabled || !hasDevice
+            !landscapeEnabled || !hasDevice || isCustomViewport
               ? 'cursor-not-allowed opacity-50'
               : ''
           }`}
           aria-label="Landscape orientation"
-          aria-pressed={orientation === 'landscape'}
+          aria-pressed={orientation === 'landscape' && !isCustomViewport}
+          title={
+            isCustomViewport
+              ? 'Orientation is not applicable for custom viewports'
+              : undefined
+          }
         >
           L
         </button>

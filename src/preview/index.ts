@@ -7,8 +7,10 @@ export type {
   PreviewInstanceId,
   PreviewLifecycle,
   PreviewState,
+  ViewportMode,
   ZoomMode,
 } from './types';
+export { CUSTOM_DEVICE_ID } from './types';
 export {
   clampZoom,
   computeEffectiveZoom,

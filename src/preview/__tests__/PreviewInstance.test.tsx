@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PreviewInstance } from '../components/PreviewInstance';
 import { usePreviewStore } from '../store/usePreviewStore';
+import { CUSTOM_DEVICE_ID } from '../types';
 import type { PreviewEntry } from '../types';
 
 // jsdom does not implement ResizeObserver — provide a minimal mock.
@@ -35,12 +36,21 @@ const ipadEntry: PreviewEntry = {
   orientation: 'portrait',
 };
 
+const customEntry: PreviewEntry = {
+  id: 'preview-3',
+  deviceId: CUSTOM_DEVICE_ID,
+  orientation: 'portrait',
+  viewportMode: 'custom',
+  customViewportWidth: 1024,
+  customViewportHeight: 768,
+};
+
 describe('PreviewInstance', () => {
   beforeEach(() => {
     usePreviewStore.getState().reset();
   });
 
-  it('renders the preview toolbar with device info', () => {
+  it('renders the device selector with the correct device', () => {
     render(
       <PreviewInstance
         entry={iphoneEntry}
@@ -48,7 +58,8 @@ describe('PreviewInstance', () => {
         onRemove={vi.fn()}
       />
     );
-    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
+    const select = screen.getByLabelText('Select device');
+    expect(select).toHaveValue('iphone-15');
   });
 
   it('renders with the shared URL', () => {
@@ -195,8 +206,11 @@ describe('PreviewInstance', () => {
         />
       </>
     );
-    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
-    expect(screen.getByText('iPad')).toBeInTheDocument();
+    // Both should have device selectors with different values
+    const selects = screen.getAllByLabelText('Select device');
+    expect(selects).toHaveLength(2);
+    expect(selects[0]).toHaveValue('iphone-15');
+    expect(selects[1]).toHaveValue('ipad');
   });
 
   it('each instance maintains independent zoom controls', () => {
@@ -242,6 +256,57 @@ describe('PreviewInstance', () => {
     expect(
       screen.queryByDisplayValue('https://shared.example.com')
     ).not.toBeInTheDocument();
+  });
+
+  // --- Custom viewport tests ---
+
+  it('custom viewport entry shows Custom device name', () => {
+    render(
+      <PreviewInstance
+        entry={customEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    // The select should show the custom device ID
+    const select = screen.getByLabelText('Select device');
+    expect(select).toHaveValue(CUSTOM_DEVICE_ID);
+  });
+
+  it('custom viewport entry shows width/height inputs', () => {
+    render(
+      <PreviewInstance
+        entry={customEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Custom viewport width')).toBeInTheDocument();
+    expect(screen.getByLabelText('Custom viewport height')).toBeInTheDocument();
+  });
+
+  it('custom viewport orientation controls are disabled', () => {
+    render(
+      <PreviewInstance
+        entry={customEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Portrait orientation')).toBeDisabled();
+    expect(screen.getByLabelText('Landscape orientation')).toBeDisabled();
+  });
+
+  it('custom viewport shows DPR 1 and zero safe-area', () => {
+    render(
+      <PreviewInstance
+        entry={customEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    // DPR 1 displayed in viewport info
+    expect(screen.getByText('0 × 0 · 1×')).toBeInTheDocument();
   });
 
   // --- Lifecycle cleanup test ---

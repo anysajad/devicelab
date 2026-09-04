@@ -169,13 +169,13 @@ describe('PreviewThumbnail', () => {
     expect(screen.getByLabelText('iPhone 15 preview')).toBeInTheDocument();
   });
 
-  it('renders null for unknown device', () => {
+  it('renders Unknown for unknown device', () => {
     const badEntry: PreviewEntry = {
       id: 'preview-bad',
       deviceId: 'nonexistent-device',
       orientation: 'portrait',
     };
-    const { container } = render(
+    render(
       <PreviewThumbnail
         entry={badEntry}
         isActive={false}
@@ -183,6 +183,7 @@ describe('PreviewThumbnail', () => {
         onClick={vi.fn()}
       />
     );
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+    expect(screen.getByText('0 × 0')).toBeInTheDocument();
   });
 });

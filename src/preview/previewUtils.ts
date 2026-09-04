@@ -8,6 +8,12 @@ import type { ComputedViewport, ZoomMode } from './types';
 /** Padding (px) around the iframe inside the host container. */
 const CONTAINER_PADDING = 32;
 
+/** Minimum custom viewport dimension (CSS pixels). Application-level constraint. */
+export const CUSTOM_VIEWPORT_MIN = 100;
+
+/** Maximum custom viewport dimension (CSS pixels). Application-level constraint. */
+export const CUSTOM_VIEWPORT_MAX = 4000;
+
 /** Minimum zoom level (25%). */
 export const ZOOM_MIN = 0.25;
 
@@ -159,6 +165,30 @@ export function sanitizeUrl(url: string): string {
   }
 
   return 'about:blank';
+}
+
+/**
+ * Parse and validate a custom viewport dimension string.
+ * Returns a valid integer in [CUSTOM_VIEWPORT_MIN, CUSTOM_VIEWPORT_MAX],
+ * or null for invalid input (empty, non-numeric, decimal, out of range).
+ *
+ * Rejects decimals rather than truncating them — "1024.5" is invalid.
+ * Does not clamp — invalid input preserves the last valid stored value.
+ */
+export function parseCustomViewport(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+
+  // Reject if the string contains a decimal point or scientific notation
+  if (trimmed.includes('.') || trimmed.toLowerCase().includes('e')) return null;
+
+  const num = Number(trimmed);
+  if (!Number.isFinite(num)) return null;
+
+  const int = Math.trunc(num);
+  if (int < CUSTOM_VIEWPORT_MIN || int > CUSTOM_VIEWPORT_MAX) return null;
+
+  return int;
 }
 
 /**
