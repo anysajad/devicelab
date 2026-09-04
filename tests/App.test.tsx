@@ -9,10 +9,10 @@ describe('App', () => {
     expect(headings.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders the tagline', () => {
+  it('renders the preview workspace', () => {
     render(<App />)
     expect(
-      screen.getByText('Preview your web apps across different devices'),
+      screen.getByLabelText('Target URL'),
     ).toBeInTheDocument()
   })
 

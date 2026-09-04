@@ -16,3 +16,4 @@ export {
 export { createPreviewController } from './previewEngine';
 export { usePreview } from './usePreview';
 export type { UsePreviewReturn } from './usePreview';
+export { PreviewWorkspace } from './components/PreviewWorkspace';
