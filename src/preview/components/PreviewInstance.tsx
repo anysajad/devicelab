@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { DeviceDefinition, DeviceOrientation } from '@/devices';
 import { getDeviceById } from '@/devices';
@@ -14,6 +14,8 @@ import type {
 } from '../types';
 import { PreviewFrame } from './PreviewFrame';
 import { PreviewToolbar } from './PreviewToolbar';
+import { DEFAULT_VIEW_TOOLS } from '../viewTools';
+import type { ViewportToolsState } from '../viewTools';
 
 interface PreviewInstanceProps {
   entry: PreviewEntry;
@@ -93,6 +95,14 @@ export function PreviewInstance({
 
   const { state, containerRef, reload, zoomIn, zoomOut, fitToContainer } =
     usePreview();
+
+  // Per-instance viewport-tool toggles (local UI state — deliberately not in
+  // the Zustand collection store; see viewTools for the separation rationale).
+  const [tools, setTools] = useState<ViewportToolsState>(DEFAULT_VIEW_TOOLS);
+
+  const toggleTool = useCallback((key: keyof ViewportToolsState) => {
+    setTools((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const hasDevice = effectiveDevice !== null;
 
@@ -288,6 +298,8 @@ export function PreviewInstance({
         customViewportWidth={entry.customViewportWidth}
         customViewportHeight={entry.customViewportHeight}
         onCustomViewportChange={handleCustomViewportChange}
+        viewTools={tools}
+        onToggleViewTool={toggleTool}
       />
 
       {/* Preview area */}
@@ -355,8 +367,11 @@ export function PreviewInstance({
             containerRef={containerRef}
             viewport={state.viewport}
             effectiveZoom={state.effectiveZoom}
+            devicePixelRatio={effectiveDevice.devicePixelRatio}
             safeArea={state.safeArea}
             deviceName={deviceName}
+            viewportMode={isCustomViewport ? 'custom' : 'preset'}
+            tools={tools}
           />
         )}
       </div>

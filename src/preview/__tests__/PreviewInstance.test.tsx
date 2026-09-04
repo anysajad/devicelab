@@ -309,6 +309,96 @@ describe('PreviewInstance', () => {
     expect(screen.getByText('0 × 0 · 1×')).toBeInTheDocument();
   });
 
+  // --- Viewport tools tests ---
+
+  it('renders viewport-tool toggles with safe-area defaulting to on', () => {
+    render(
+      <PreviewInstance
+        entry={iphoneEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Toggle rulers')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle grid overlay')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle safe-area')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle viewport info')).toBeInTheDocument();
+
+    // By default safe-area is on (preserves existing behavior), others off.
+    expect(screen.getByLabelText('Toggle safe-area')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByLabelText('Toggle rulers')).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('toggling each viewport tool flips its aria-pressed state', async () => {
+    render(
+      <PreviewInstance
+        entry={iphoneEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    const rulersBtn = screen.getByLabelText('Toggle rulers');
+    expect(rulersBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.click(rulersBtn);
+    expect(screen.getByLabelText('Toggle rulers')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await userEvent.click(screen.getByLabelText('Toggle grid overlay'));
+    expect(screen.getByLabelText('Toggle grid overlay')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('keeps viewport-tool state isolated per instance', async () => {
+    render(
+      <>
+        <PreviewInstance
+          entry={iphoneEntry}
+          sharedUrl="https://example.com"
+          onRemove={vi.fn()}
+        />
+        <PreviewInstance
+          entry={ipadEntry}
+          sharedUrl="https://example.com"
+          onRemove={vi.fn()}
+        />
+      </>
+    );
+
+    const rulersButtons = screen.getAllByLabelText('Toggle rulers');
+    expect(rulersButtons).toHaveLength(2);
+    expect(rulersButtons[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(rulersButtons[1]).toHaveAttribute('aria-pressed', 'false');
+    // Toggle rulers on the first instance only.
+    await userEvent.click(rulersButtons[0]!);
+
+    const after = screen.getAllByLabelText('Toggle rulers');
+    expect(after[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(after[1]).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('renders viewport-tool toggles for custom viewport instances', () => {
+    render(
+      <PreviewInstance
+        entry={customEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Toggle rulers')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle grid overlay')).toBeInTheDocument();
+  });
+
   // --- Lifecycle cleanup test ---
 
   it('removing an entry does not create orphaned lifecycleStatus', () => {

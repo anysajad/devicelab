@@ -13,6 +13,7 @@ import {
 } from '../previewUtils';
 import { CUSTOM_DEVICE_ID } from '../types';
 import type { PreviewLifecycle, ZoomMode } from '../types';
+import type { ViewportToolsState } from '../viewTools';
 
 interface PreviewToolbarProps {
   url: string;
@@ -48,6 +49,10 @@ interface PreviewToolbarProps {
   customViewportHeight?: number;
   /** Called when custom viewport dimensions are committed. */
   onCustomViewportChange?: (width: number, height: number) => void;
+  /** Current per-instance viewport-tool toggle state. */
+  viewTools?: ViewportToolsState;
+  /** Called when a viewport tool is toggled. */
+  onToggleViewTool?: (key: keyof ViewportToolsState) => void;
 }
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
@@ -58,6 +63,105 @@ const CATEGORY_LABELS: Record<DeviceCategory, string> = {
 };
 
 const CATEGORY_ORDER: DeviceCategory[] = ['phone', 'tablet', 'desktop'];
+
+interface ViewToolButton {
+  key: keyof ViewportToolsState;
+  name: string;
+  label: string;
+  title: string;
+  icon: React.ReactNode;
+}
+
+const VIEW_TOOL_BUTTONS: ViewToolButton[] = [
+  {
+    key: 'rulers',
+    name: 'Rulers',
+    label: 'Toggle rulers',
+    title: 'Show CSS-pixel rulers around the viewport',
+    icon: (
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4 6h16M4 12h16M4 18h16"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: 'grid',
+    name: 'Grid',
+    label: 'Toggle grid overlay',
+    title: 'Show a viewport-only grid overlay',
+    icon: (
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M3 8h18M3 12h18M3 16h18M8 3v18M12 3v18M16 3v18"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: 'safeArea',
+    name: 'Safe',
+    label: 'Toggle safe-area',
+    title: 'Show safe-area boundaries',
+    icon: (
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M4 8h16M4 16h16M8 4v16M16 4v16"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: 'info',
+    name: 'Info',
+    label: 'Toggle viewport info',
+    title: 'Show the viewport information readout',
+    icon: (
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ),
+  },
+];
 
 function getStatusColor(lifecycle: PreviewLifecycle): string {
   switch (lifecycle) {
@@ -113,6 +217,8 @@ export function PreviewToolbar({
   customViewportWidth,
   customViewportHeight,
   onCustomViewportChange,
+  viewTools,
+  onToggleViewTool,
 }: PreviewToolbarProps) {
   const grouped = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -384,6 +490,43 @@ export function PreviewToolbar({
           Fit
         </button>
       </div>
+
+      {/* Separator */}
+      <div
+        className="h-5 w-px bg-gray-200 dark:bg-gray-700"
+        aria-hidden="true"
+      />
+
+      {/* Viewport tools (rulers / grid / safe-area / info) */}
+      {hasDevice && onToggleViewTool && viewTools && (
+        <div
+          className="flex overflow-hidden rounded-md border border-gray-300 dark:border-gray-700"
+          role="group"
+          aria-label="Viewport tools"
+        >
+          {VIEW_TOOL_BUTTONS.map((tool) => {
+            const active = viewTools[tool.key];
+            return (
+              <button
+                key={tool.key}
+                type="button"
+                onClick={() => onToggleViewTool(tool.key)}
+                aria-label={tool.label}
+                aria-pressed={active}
+                title={tool.title}
+                className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+                  active
+                    ? 'bg-brand-500 text-white'
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                {tool.icon}
+                {tool.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Separator */}
       <div

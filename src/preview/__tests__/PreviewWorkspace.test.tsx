@@ -494,6 +494,57 @@ describe('PreviewWorkspace (multi-device)', () => {
     expect(zoomInButtons).toHaveLength(2);
   });
 
+  // --- Viewport tools in layout modes ---
+
+  it('grid mode: each instance exposes viewport-tool toggles independently', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    render(<PreviewWorkspace />);
+
+    const toggles = screen.getAllByLabelText('Toggle rulers');
+    expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-pressed', 'false');
+
+    // Toggling the first instance must not affect the second.
+    await userEvent.click(toggles[0]!);
+    const after = screen.getAllByLabelText('Toggle rulers');
+    expect(after[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(after[1]).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('focus mode: the single rendered instance exposes viewport-tool toggles', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore
+      .getState()
+      .setActiveId(usePreviewStore.getState().entries[0]!.id);
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+    // Only the active preview is shown; its rulers toggle is present.
+    const toggles = screen.getAllByLabelText('Toggle rulers');
+    expect(toggles).toHaveLength(1);
+
+    await userEvent.click(screen.getByLabelText('Toggle grid overlay'));
+    expect(screen.getByLabelText('Toggle grid overlay')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('compare mode: each compared instance exposes viewport-tool toggles', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().addEntry('iphone-15-pro');
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Compare layout'));
+    // All three entries are compared; each instance has rulers toggles.
+    const toggles = screen.getAllByLabelText('Toggle rulers');
+    expect(toggles.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('focus mode: only active preview has controls', () => {
     usePreviewStore.getState().addEntry('iphone-15');
     usePreviewStore.getState().addEntry('ipad');
