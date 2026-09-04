@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { getDeviceById } from '@/devices';
 import type { DeviceDefinition } from '@/devices';
 import {
+  clampZoom,
+  computeEffectiveZoom,
   computePreviewState,
   computeSafeArea,
   computeViewport,
   computeZoom,
   resolveOrientation,
   sanitizeUrl,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_STEP,
 } from '../previewUtils';
 
 const iphone15 = getDeviceById('iphone-15')!;
@@ -237,5 +242,67 @@ describe('computePreviewState', () => {
 
     expect(state.lifecycle).toBe('error');
     expect(state.error).toBe('Failed to load');
+  });
+
+  it('includes zoom mode and effective zoom in state', () => {
+    const state = computePreviewState(
+      { url: 'https://example.com', device: iphone15, orientation: 'portrait' },
+      800,
+      600,
+      'ready',
+      null,
+      'manual',
+      0.75
+    );
+
+    expect(state.zoomMode).toBe('manual');
+    expect(state.manualZoom).toBe(0.75);
+    expect(state.effectiveZoom).toBe(0.75);
+  });
+});
+
+describe('clampZoom', () => {
+  it('returns the value when within range', () => {
+    expect(clampZoom(0.5)).toBe(0.5);
+    expect(clampZoom(1)).toBe(1);
+    expect(clampZoom(2)).toBe(2);
+  });
+
+  it('clamps to minimum', () => {
+    expect(clampZoom(0.1)).toBe(ZOOM_MIN);
+    expect(clampZoom(0)).toBe(ZOOM_MIN);
+    expect(clampZoom(-1)).toBe(ZOOM_MIN);
+  });
+
+  it('clamps to maximum', () => {
+    expect(clampZoom(5)).toBe(ZOOM_MAX);
+    expect(clampZoom(100)).toBe(ZOOM_MAX);
+  });
+});
+
+describe('computeEffectiveZoom', () => {
+  it('returns auto-fit zoom in fit mode', () => {
+    expect(computeEffectiveZoom('fit', 0.5, 1)).toBe(0.5);
+    expect(computeEffectiveZoom('fit', 0.8, 2)).toBe(0.8);
+  });
+
+  it('returns clamped manual zoom in manual mode', () => {
+    expect(computeEffectiveZoom('manual', 0.5, 0.75)).toBe(0.75);
+    expect(computeEffectiveZoom('manual', 0.5, 0.1)).toBe(ZOOM_MIN);
+    expect(computeEffectiveZoom('manual', 0.5, 5)).toBe(ZOOM_MAX);
+  });
+});
+
+describe('zoom constants', () => {
+  it('ZOOM_MIN is 0.25', () => {
+    expect(ZOOM_MIN).toBe(0.25);
+  });
+
+  it('ZOOM_MAX is 3.0', () => {
+    expect(ZOOM_MAX).toBe(3.0);
+  });
+
+  it('ZOOM_STEP is 0.1', () => {
+    expect(ZOOM_STEP).toBe(0.1);
   });
 });

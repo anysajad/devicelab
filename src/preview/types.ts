@@ -7,6 +7,9 @@ import type {
 /** Lifecycle state of the preview iframe. */
 export type PreviewLifecycle = 'idle' | 'loading' | 'ready' | 'error';
 
+/** Zoom mode: 'fit' = auto-fit to container, 'manual' = user-specified. */
+export type ZoomMode = 'fit' | 'manual';
+
 /** Configuration provided to initialize or update a preview. */
 export interface PreviewConfig {
   readonly url: string;
@@ -24,7 +27,14 @@ export interface ComputedViewport {
 export interface PreviewState {
   readonly config: PreviewConfig;
   readonly viewport: ComputedViewport;
+  /** Auto-fit zoom computed from container and viewport dimensions. */
   readonly zoom: number;
+  /** Current zoom mode: 'fit' or 'manual'. */
+  readonly zoomMode: ZoomMode;
+  /** User-specified zoom level (only meaningful when zoomMode is 'manual'). */
+  readonly manualZoom: number;
+  /** The zoom value actually applied to the iframe transform. */
+  readonly effectiveZoom: number;
   readonly safeArea: SafeAreaInsets;
   readonly lifecycle: PreviewLifecycle;
   readonly error: string | null;
@@ -46,4 +56,12 @@ export interface PreviewController {
   subscribe(listener: (state: PreviewState) => void): () => void;
   /** Get the underlying iframe element (or null if destroyed). */
   getIframe(): HTMLIFrameElement | null;
+  /** Set an explicit zoom level. Switches to manual mode. */
+  setZoom(zoom: number): void;
+  /** Zoom in by one step. Switches to manual mode. */
+  zoomIn(): void;
+  /** Zoom out by one step. Switches to manual mode. */
+  zoomOut(): void;
+  /** Switch between 'fit' and 'manual' zoom modes. */
+  setZoomMode(mode: ZoomMode): void;
 }

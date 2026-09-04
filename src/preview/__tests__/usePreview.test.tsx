@@ -35,6 +35,10 @@ describe('usePreview', () => {
     expect(typeof result.current.setDevice).toBe('function');
     expect(typeof result.current.setOrientation).toBe('function');
     expect(typeof result.current.reload).toBe('function');
+    expect(typeof result.current.setZoom).toBe('function');
+    expect(typeof result.current.zoomIn).toBe('function');
+    expect(typeof result.current.zoomOut).toBe('function');
+    expect(typeof result.current.fitToContainer).toBe('function');
     expect(result.current.controller).toBeDefined();
   });
 
@@ -143,6 +147,41 @@ describe('usePreview', () => {
     // Default container size should produce a zoom ≤ 1
     expect(result.current.state.zoom).toBeGreaterThan(0);
     expect(result.current.state.zoom).toBeLessThanOrEqual(1);
+    expect(result.current.state.zoomMode).toBe('fit');
+    expect(result.current.state.effectiveZoom).toBe(result.current.state.zoom);
+  });
+
+  it('setZoom() switches to manual mode', () => {
+    const { result } = renderHook(() => usePreview());
+
+    act(() => {
+      result.current.load('https://example.com', iphone15);
+    });
+
+    act(() => {
+      result.current.setZoom(0.75);
+    });
+
+    expect(result.current.state.zoomMode).toBe('manual');
+    expect(result.current.state.effectiveZoom).toBe(0.75);
+  });
+
+  it('fitToContainer() switches to fit mode', () => {
+    const { result } = renderHook(() => usePreview());
+
+    act(() => {
+      result.current.load('https://example.com', iphone15);
+    });
+
+    act(() => {
+      result.current.setZoom(0.75);
+    });
+    expect(result.current.state.zoomMode).toBe('manual');
+
+    act(() => {
+      result.current.fitToContainer();
+    });
+    expect(result.current.state.zoomMode).toBe('fit');
   });
 
   it('cleans up on unmount without errors', () => {

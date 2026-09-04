@@ -3,7 +3,6 @@ import type { SafeAreaInsets, DeviceViewport } from '@/devices';
 interface SafeAreaOverlayProps {
   safeArea: SafeAreaInsets;
   viewport: DeviceViewport;
-  zoom: number;
 }
 
 /**
@@ -13,12 +12,13 @@ interface SafeAreaOverlayProps {
  * where a real device would have safe-area insets. It is a VISUAL
  * REPRESENTATION ONLY and does NOT inject CSS env() values into the
  * iframe or otherwise affect the target application's layout.
+ *
+ * The overlay lives inside the container that the Preview Engine scales
+ * via CSS transform: scale(effectiveZoom). The bar dimensions use raw
+ * viewport/safe-area pixel values — the container's transform handles
+ * visual scaling. No zoom multiplication is applied here.
  */
-export function SafeAreaOverlay({
-  safeArea,
-  viewport,
-  zoom,
-}: SafeAreaOverlayProps) {
+export function SafeAreaOverlay({ safeArea, viewport }: SafeAreaOverlayProps) {
   const hasInsets =
     safeArea.top > 0 ||
     safeArea.right > 0 ||
@@ -43,7 +43,7 @@ export function SafeAreaOverlay({
           className="absolute top-0 left-0 flex items-center justify-center"
           style={{
             width: `${viewport.width}px`,
-            height: `${safeArea.top * zoom}px`,
+            height: `${safeArea.top}px`,
             backgroundColor: color,
           }}
         >
@@ -62,7 +62,7 @@ export function SafeAreaOverlay({
           className="absolute bottom-0 left-0 flex items-center justify-center"
           style={{
             width: `${viewport.width}px`,
-            height: `${safeArea.bottom * zoom}px`,
+            height: `${safeArea.bottom}px`,
             backgroundColor: color,
           }}
         >
@@ -80,7 +80,7 @@ export function SafeAreaOverlay({
         <div
           className="absolute top-0 left-0 flex items-center justify-center"
           style={{
-            width: `${safeArea.left * zoom}px`,
+            width: `${safeArea.left}px`,
             height: `${viewport.height}px`,
             backgroundColor: color,
           }}
@@ -99,7 +99,7 @@ export function SafeAreaOverlay({
         <div
           className="absolute top-0 right-0 flex items-center justify-center"
           style={{
-            width: `${safeArea.right * zoom}px`,
+            width: `${safeArea.right}px`,
             height: `${viewport.height}px`,
             backgroundColor: color,
           }}

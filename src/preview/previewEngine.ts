@@ -4,13 +4,17 @@ import type {
   PreviewController,
   PreviewLifecycle,
   PreviewState,
+  ZoomMode,
 } from './types';
 import {
+  clampZoom,
+  computeEffectiveZoom,
   computePreviewState,
   computeViewport,
   computeZoom,
   resolveOrientation,
   sanitizeUrl,
+  ZOOM_STEP,
 } from './previewUtils';
 
 /** Default container dimensions used before the real container is measured. */
@@ -23,8 +27,9 @@ const DEFAULT_CONTAINER = { width: 800, height: 600 };
  * and computes all derived state (viewport, zoom, safe-area) from the
  * active PreviewConfig and the host container dimensions.
  *
- * The iframe must be mounted into a DOM container by the caller (e.g. a
- * React hook). The controller does not append the iframe to any parent.
+ * The controller is the single authority for all zoom/scaling. It manages
+ * both auto-fit zoom and manual zoom. The iframe's CSS viewport dimensions
+ * are never changed by zoom — only the visual `transform: scale()` is affected.
  */
 export function createPreviewController(): PreviewController {
   let iframe: HTMLIFrameElement | null = null;
@@ -34,6 +39,10 @@ export function createPreviewController(): PreviewController {
   let currentConfig: PreviewConfig | null = null;
   let containerWidth = DEFAULT_CONTAINER.width;
   let containerHeight = DEFAULT_CONTAINER.height;
+
+  // Zoom state
+  let zoomMode: ZoomMode = 'fit';
+  let manualZoom = 1;
 
   // Derived state
   let lifecycle: PreviewLifecycle = 'idle';
@@ -52,6 +61,17 @@ export function createPreviewController(): PreviewController {
     }
   }
 
+  function getEffectiveZoom(): number {
+    if (!currentConfig) return 1;
+    const orientation = resolveOrientation(
+      currentConfig.device,
+      currentConfig.orientation
+    );
+    const viewport = computeViewport(currentConfig.device, orientation);
+    const autoFitZoom = computeZoom(viewport, containerWidth, containerHeight);
+    return computeEffectiveZoom(zoomMode, autoFitZoom, manualZoom);
+  }
+
   function snapshot(): PreviewState {
     if (!currentConfig) {
       return {
@@ -62,6 +82,9 @@ export function createPreviewController(): PreviewController {
         },
         viewport: { width: 0, height: 0 },
         zoom: 1,
+        zoomMode: 'fit',
+        manualZoom: 1,
+        effectiveZoom: 1,
         safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
         lifecycle: 'idle',
         error: null,
@@ -73,7 +96,9 @@ export function createPreviewController(): PreviewController {
       containerWidth,
       containerHeight,
       lifecycle,
-      error
+      error,
+      zoomMode,
+      manualZoom
     );
   }
 
@@ -87,6 +112,7 @@ export function createPreviewController(): PreviewController {
     const viewport = computeViewport(currentConfig.device, orientation);
 
     // The iframe's CSS dimensions are the device viewport (unscaled).
+    // These NEVER change with zoom — only the visual transform is affected.
     iframe.style.width = `${viewport.width}px`;
     iframe.style.height = `${viewport.height}px`;
   }
@@ -94,16 +120,11 @@ export function createPreviewController(): PreviewController {
   function updateIframeTransform(): void {
     if (!iframe || !currentConfig) return;
 
-    const orientation = resolveOrientation(
-      currentConfig.device,
-      currentConfig.orientation
-    );
-    const viewport = computeViewport(currentConfig.device, orientation);
-    const zoom = computeZoom(viewport, containerWidth, containerHeight);
+    const effectiveZoom = getEffectiveZoom();
 
     // Host-side visual scaling. The iframe content always sees its correct
     // CSS pixel dimensions; transform: scale only affects visual presentation.
-    iframe.style.transform = `scale(${zoom})`;
+    iframe.style.transform = `scale(${effectiveZoom})`;
     iframe.style.transformOrigin = 'top left';
   }
 
@@ -246,6 +267,37 @@ export function createPreviewController(): PreviewController {
     return iframe;
   }
 
+  function setZoom(zoom: number): void {
+    if (destroyed) return;
+    zoomMode = 'manual';
+    manualZoom = clampZoom(zoom);
+    updateIframeTransform();
+    emit();
+  }
+
+  function zoomIn(): void {
+    if (destroyed) return;
+    zoomMode = 'manual';
+    manualZoom = clampZoom(manualZoom + ZOOM_STEP);
+    updateIframeTransform();
+    emit();
+  }
+
+  function zoomOut(): void {
+    if (destroyed) return;
+    zoomMode = 'manual';
+    manualZoom = clampZoom(manualZoom - ZOOM_STEP);
+    updateIframeTransform();
+    emit();
+  }
+
+  function setZoomMode(mode: ZoomMode): void {
+    if (destroyed) return;
+    zoomMode = mode;
+    updateIframeTransform();
+    emit();
+  }
+
   return {
     load,
     setContainerSize,
@@ -254,5 +306,9 @@ export function createPreviewController(): PreviewController {
     getState,
     subscribe,
     getIframe,
+    setZoom,
+    zoomIn,
+    zoomOut,
+    setZoomMode,
   };
 }

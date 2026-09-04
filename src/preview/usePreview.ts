@@ -20,6 +20,14 @@ export interface UsePreviewReturn {
   reload: () => void;
   /** The underlying controller (for advanced use). */
   controller: PreviewController;
+  /** Set an explicit zoom level. Switches to manual mode. */
+  setZoom: (zoom: number) => void;
+  /** Zoom in by one step. Switches to manual mode. */
+  zoomIn: () => void;
+  /** Zoom out by one step. Switches to manual mode. */
+  zoomOut: () => void;
+  /** Switch to fit mode (auto-fit to container). */
+  fitToContainer: () => void;
 }
 
 /**
@@ -143,6 +151,25 @@ export function usePreview(
     controller.reload();
   }, [controller]);
 
+  const setZoom = useCallback(
+    (zoom: number) => {
+      controller.setZoom(zoom);
+    },
+    [controller]
+  );
+
+  const zoomIn = useCallback(() => {
+    controller.zoomIn();
+  }, [controller]);
+
+  const zoomOut = useCallback(() => {
+    controller.zoomOut();
+  }, [controller]);
+
+  const fitToContainer = useCallback(() => {
+    controller.setZoomMode('fit');
+  }, [controller]);
+
   return {
     state,
     containerRef,
@@ -151,5 +178,9 @@ export function usePreview(
     setOrientation,
     reload,
     controller,
+    setZoom,
+    zoomIn,
+    zoomOut,
+    fitToContainer,
   };
 }

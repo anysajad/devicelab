@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { getDeviceById } from '@/devices';
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../previewUtils';
 import { createPreviewController } from '../previewEngine';
 
 const iphone15 = getDeviceById('iphone-15')!;
@@ -273,6 +274,213 @@ describe('createPreviewController', () => {
     expect(iframe.style.transform).toMatch(/^scale\(/);
     expect(iframe.style.transformOrigin).toBe('top left');
 
+    controller.destroy();
+  });
+
+  // --- Zoom tests ---
+
+  it('default zoom state is fit mode', () => {
+    const controller = createPreviewController();
+    const state = controller.getState();
+    expect(state.zoomMode).toBe('fit');
+    expect(state.manualZoom).toBe(1);
+    expect(state.effectiveZoom).toBe(1);
+    controller.destroy();
+  });
+
+  it('setZoom() switches to manual mode', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.75);
+    const state = controller.getState();
+    expect(state.zoomMode).toBe('manual');
+    expect(state.manualZoom).toBe(0.75);
+    expect(state.effectiveZoom).toBe(0.75);
+
+    controller.destroy();
+  });
+
+  it('setZoom() clamps to minimum', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.1);
+    expect(controller.getState().manualZoom).toBe(ZOOM_MIN);
+    expect(controller.getState().effectiveZoom).toBe(ZOOM_MIN);
+
+    controller.destroy();
+  });
+
+  it('setZoom() clamps to maximum', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(5);
+    expect(controller.getState().manualZoom).toBe(ZOOM_MAX);
+    expect(controller.getState().effectiveZoom).toBe(ZOOM_MAX);
+
+    controller.destroy();
+  });
+
+  it('zoomIn() increments by step', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.5);
+    controller.zoomIn();
+    expect(controller.getState().manualZoom).toBeCloseTo(0.5 + ZOOM_STEP);
+
+    controller.destroy();
+  });
+
+  it('zoomIn() clamps at maximum', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(ZOOM_MAX - 0.01);
+    controller.zoomIn();
+    expect(controller.getState().manualZoom).toBe(ZOOM_MAX);
+
+    controller.destroy();
+  });
+
+  it('zoomOut() decrements by step', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.5);
+    controller.zoomOut();
+    expect(controller.getState().manualZoom).toBeCloseTo(0.5 - ZOOM_STEP);
+
+    controller.destroy();
+  });
+
+  it('zoomOut() clamps at minimum', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(ZOOM_MIN + 0.01);
+    controller.zoomOut();
+    expect(controller.getState().manualZoom).toBe(ZOOM_MIN);
+
+    controller.destroy();
+  });
+
+  it('setZoomMode("fit") restores auto-fit zoom', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+    controller.setContainerSize(800, 600);
+
+    controller.setZoom(2);
+    expect(controller.getState().zoomMode).toBe('manual');
+
+    controller.setZoomMode('fit');
+    const state = controller.getState();
+    expect(state.zoomMode).toBe('fit');
+    expect(state.effectiveZoom).toBe(state.zoom); // equals auto-fit
+
+    controller.destroy();
+  });
+
+  it('setZoomMode("manual") preserves manualZoom', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.75);
+    controller.setZoomMode('fit');
+    controller.setZoomMode('manual');
+    expect(controller.getState().manualZoom).toBe(0.75);
+    expect(controller.getState().effectiveZoom).toBe(0.75);
+
+    controller.destroy();
+  });
+
+  it('manual zoom persists across device change', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.75);
+    controller.load({
+      url: 'https://example.com',
+      device: desktop1080p,
+      orientation: 'landscape',
+    });
+
+    expect(controller.getState().zoomMode).toBe('manual');
+    expect(controller.getState().manualZoom).toBe(0.75);
+    expect(controller.getState().effectiveZoom).toBe(0.75);
+
+    controller.destroy();
+  });
+
+  it('manual zoom persists across container resize', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.75);
+    controller.setContainerSize(400, 400);
+    expect(controller.getState().effectiveZoom).toBe(0.75);
+
+    controller.destroy();
+  });
+
+  it('fit mode recalculates on container resize', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setContainerSize(400, 400);
+    const zoom1 = controller.getState().effectiveZoom;
+
+    controller.setContainerSize(800, 800);
+    const zoom2 = controller.getState().effectiveZoom;
+
+    expect(zoom2).toBeGreaterThan(zoom1);
+
+    controller.destroy();
+  });
+
+  it('iframe CSS dimensions remain the device viewport regardless of zoom', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(2);
+    const iframe = controller.getIframe()!;
+    // iPhone 15 portrait: 393×852
+    expect(iframe.style.width).toBe('393px');
+    expect(iframe.style.height).toBe('852px');
+
+    controller.destroy();
+  });
+
+  it('iframe transform uses effectiveZoom', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig());
+
+    controller.setZoom(0.75);
+    const iframe = controller.getIframe()!;
+    expect(iframe.style.transform).toBe('scale(0.75)');
+
+    controller.destroy();
+  });
+
+  it('no-ops zoom methods after destroy', () => {
+    const controller = createPreviewController();
+    controller.destroy();
+
+    // These should not throw
+    controller.setZoom(0.5);
+    controller.zoomIn();
+    controller.zoomOut();
+    controller.setZoomMode('fit');
+  });
+
+  it('new zoom API methods exist on controller', () => {
+    const controller = createPreviewController();
+    expect(typeof controller.setZoom).toBe('function');
+    expect(typeof controller.zoomIn).toBe('function');
+    expect(typeof controller.zoomOut).toBe('function');
+    expect(typeof controller.setZoomMode).toBe('function');
     controller.destroy();
   });
 });

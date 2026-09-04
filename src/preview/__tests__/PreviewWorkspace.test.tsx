@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ZOOM_MAX, ZOOM_MIN } from '../previewUtils';
 import { PreviewToolbar } from '../components/PreviewToolbar';
 import { SafeAreaOverlay } from '../components/SafeAreaOverlay';
 
@@ -14,7 +15,6 @@ describe('SafeAreaOverlay', () => {
       <SafeAreaOverlay
         safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
         viewport={{ width: 393, height: 852 }}
-        zoom={1}
       />
     );
     expect(container.firstChild).toBeNull();
@@ -25,7 +25,6 @@ describe('SafeAreaOverlay', () => {
       <SafeAreaOverlay
         safeArea={{ top: 59, right: 0, bottom: 34, left: 0 }}
         viewport={{ width: 393, height: 852 }}
-        zoom={1}
       />
     );
     // Should have the wrapper div with aria-hidden
@@ -36,17 +35,17 @@ describe('SafeAreaOverlay', () => {
     expect(bars.length).toBe(2);
   });
 
-  it('scales bar dimensions by zoom', () => {
+  it('uses raw safe-area values without zoom multiplication', () => {
     const { container } = render(
       <SafeAreaOverlay
         safeArea={{ top: 59, right: 0, bottom: 34, left: 0 }}
         viewport={{ width: 393, height: 852 }}
-        zoom={0.5}
       />
     );
     const wrapper = container.querySelector('[aria-hidden="true"]');
     const topBar = wrapper!.querySelector('div');
-    expect(topBar).toHaveStyle({ height: '29.5px' }); // 59 * 0.5
+    // Raw value: 59px (no zoom multiplication — container transform handles scaling)
+    expect(topBar).toHaveStyle({ height: '59px' });
   });
 
   it('has aria-hidden for assistive technology', () => {
@@ -54,7 +53,6 @@ describe('SafeAreaOverlay', () => {
       <SafeAreaOverlay
         safeArea={{ top: 59, right: 0, bottom: 0, left: 0 }}
         viewport={{ width: 393, height: 852 }}
-        zoom={1}
       />
     );
     expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
@@ -74,8 +72,13 @@ describe('PreviewToolbar', () => {
     supportedOrientations: ['portrait', 'landscape'] as const,
     onOrientationChange: vi.fn(),
     onReload: vi.fn(),
+    onZoomIn: vi.fn(),
+    onZoomOut: vi.fn(),
     onFit: vi.fn(),
-    zoom: 0.667,
+    effectiveZoom: 0.667,
+    zoomMode: 'fit' as const,
+    canZoomIn: true,
+    canZoomOut: true,
     viewportWidth: 393,
     viewportHeight: 852,
     devicePixelRatio: 3,
@@ -162,6 +165,22 @@ describe('PreviewToolbar', () => {
     expect(onReload).toHaveBeenCalled();
   });
 
+  it('calls onZoomIn when zoom in button clicked', async () => {
+    const onZoomIn = vi.fn();
+    render(<PreviewToolbar {...defaultProps} onZoomIn={onZoomIn} />);
+
+    await userEvent.click(screen.getByLabelText('Zoom in'));
+    expect(onZoomIn).toHaveBeenCalled();
+  });
+
+  it('calls onZoomOut when zoom out button clicked', async () => {
+    const onZoomOut = vi.fn();
+    render(<PreviewToolbar {...defaultProps} onZoomOut={onZoomOut} />);
+
+    await userEvent.click(screen.getByLabelText('Zoom out'));
+    expect(onZoomOut).toHaveBeenCalled();
+  });
+
   it('calls onFit when fit button clicked', async () => {
     const onFit = vi.fn();
     render(<PreviewToolbar {...defaultProps} onFit={onFit} />);
@@ -170,9 +189,48 @@ describe('PreviewToolbar', () => {
     expect(onFit).toHaveBeenCalled();
   });
 
-  it('displays zoom percentage from engine', () => {
-    render(<PreviewToolbar {...defaultProps} zoom={0.667} />);
+  it('displays effective zoom percentage', () => {
+    render(<PreviewToolbar {...defaultProps} effectiveZoom={0.667} />);
     expect(screen.getByText('67%')).toBeInTheDocument();
+  });
+
+  it('displays 100% at native zoom', () => {
+    render(<PreviewToolbar {...defaultProps} effectiveZoom={1} />);
+    expect(screen.getByText('100%')).toBeInTheDocument();
+  });
+
+  it('displays zoom out as disabled at minimum', () => {
+    render(
+      <PreviewToolbar
+        {...defaultProps}
+        effectiveZoom={ZOOM_MIN}
+        canZoomOut={false}
+      />
+    );
+    expect(screen.getByLabelText('Zoom out')).toBeDisabled();
+  });
+
+  it('displays zoom in as disabled at maximum', () => {
+    render(
+      <PreviewToolbar
+        {...defaultProps}
+        effectiveZoom={ZOOM_MAX}
+        canZoomIn={false}
+      />
+    );
+    expect(screen.getByLabelText('Zoom in')).toBeDisabled();
+  });
+
+  it('highlights fit button when in fit mode', () => {
+    render(<PreviewToolbar {...defaultProps} zoomMode="fit" />);
+    const fitButton = screen.getByLabelText('Fit preview to container');
+    expect(fitButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not highlight fit button when in manual mode', () => {
+    render(<PreviewToolbar {...defaultProps} zoomMode="manual" />);
+    const fitButton = screen.getByLabelText('Fit preview to container');
+    expect(fitButton).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('displays viewport dimensions and DPR', () => {
@@ -218,6 +276,8 @@ describe('PreviewToolbar', () => {
     expect(screen.getByLabelText('Portrait orientation')).toBeDisabled();
     expect(screen.getByLabelText('Landscape orientation')).toBeDisabled();
     expect(screen.getByLabelText('Fit preview to container')).toBeDisabled();
+    expect(screen.getByLabelText('Zoom in')).toBeDisabled();
+    expect(screen.getByLabelText('Zoom out')).toBeDisabled();
   });
 
   it('has proper aria-label on nav element', () => {

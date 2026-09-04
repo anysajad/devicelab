@@ -4,7 +4,7 @@ import type {
   DeviceDefinition,
   DeviceOrientation,
 } from '@/devices';
-import type { PreviewLifecycle } from '../types';
+import type { PreviewLifecycle, ZoomMode } from '../types';
 
 interface PreviewToolbarProps {
   url: string;
@@ -16,8 +16,13 @@ interface PreviewToolbarProps {
   supportedOrientations: readonly DeviceOrientation[];
   onOrientationChange: (orientation: DeviceOrientation) => void;
   onReload: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
   onFit: () => void;
-  zoom: number;
+  effectiveZoom: number;
+  zoomMode: ZoomMode;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
   viewportWidth: number;
   viewportHeight: number;
   devicePixelRatio: number;
@@ -70,8 +75,13 @@ export function PreviewToolbar({
   supportedOrientations,
   onOrientationChange,
   onReload,
+  onZoomIn,
+  onZoomOut,
   onFit,
-  zoom,
+  effectiveZoom,
+  zoomMode,
+  canZoomIn,
+  canZoomOut,
   viewportWidth,
   viewportHeight,
   devicePixelRatio,
@@ -87,7 +97,8 @@ export function PreviewToolbar({
   const portraitEnabled = supportedOrientations.includes('portrait');
   const landscapeEnabled = supportedOrientations.includes('landscape');
 
-  const zoomPercent = Math.round(zoom * 100);
+  const zoomPercent = Math.round(effectiveZoom * 100);
+  const isFitMode = zoomMode === 'fit';
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
@@ -210,17 +221,40 @@ export function PreviewToolbar({
         aria-hidden="true"
       />
 
-      {/* Zoom display + Fit */}
+      {/* Zoom controls */}
       <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onZoomOut}
+          disabled={!hasDevice || !canZoomOut}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-gray-50 text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
         <span className="min-w-[3ch] text-center text-xs font-medium text-gray-600 tabular-nums dark:text-gray-400">
           {hasDevice ? `${zoomPercent}%` : '—'}
         </span>
         <button
           type="button"
+          onClick={onZoomIn}
+          disabled={!hasDevice || !canZoomIn}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-gray-50 text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+        <button
+          type="button"
           onClick={onFit}
           disabled={!hasDevice}
-          className="rounded-md border border-gray-300 bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            isFitMode && hasDevice
+              ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-700 dark:bg-brand-950 dark:text-brand-300'
+              : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+          }`}
           aria-label="Fit preview to container"
+          aria-pressed={isFitMode}
         >
           Fit
         </button>

@@ -3,10 +3,33 @@ import type {
   DeviceOrientation,
   SafeAreaInsets,
 } from '@/devices';
-import type { ComputedViewport } from './types';
+import type { ComputedViewport, ZoomMode } from './types';
 
 /** Padding (px) around the iframe inside the host container. */
 const CONTAINER_PADDING = 32;
+
+/** Minimum zoom level (25%). */
+export const ZOOM_MIN = 0.25;
+
+/** Maximum zoom level (300%). */
+export const ZOOM_MAX = 3.0;
+
+/** Zoom step for zoomIn/zoomOut (10%). */
+export const ZOOM_STEP = 0.1;
+
+/** Clamp a zoom value to [ZOOM_MIN, ZOOM_MAX]. */
+export function clampZoom(zoom: number): number {
+  return Math.min(Math.max(zoom, ZOOM_MIN), ZOOM_MAX);
+}
+
+/** Compute effective zoom from mode, auto-fit zoom, and manual zoom. */
+export function computeEffectiveZoom(
+  mode: ZoomMode,
+  autoFitZoom: number,
+  manualZoom: number
+): number {
+  return mode === 'manual' ? clampZoom(manualZoom) : autoFitZoom;
+}
 
 /**
  * Compute the iframe's CSS viewport dimensions for the given device and
@@ -151,17 +174,23 @@ export function computePreviewState(
   containerWidth: number,
   containerHeight: number,
   lifecycle: 'idle' | 'loading' | 'ready' | 'error',
-  error: string | null
+  error: string | null,
+  zoomMode: ZoomMode = 'fit',
+  manualZoom = 1
 ) {
   const orientation = resolveOrientation(config.device, config.orientation);
   const viewport = computeViewport(config.device, orientation);
   const zoom = computeZoom(viewport, containerWidth, containerHeight);
   const safeArea = computeSafeArea(config.device, orientation);
+  const effectiveZoom = computeEffectiveZoom(zoomMode, zoom, manualZoom);
 
   return {
     config: { ...config, orientation },
     viewport,
     zoom,
+    zoomMode,
+    manualZoom,
+    effectiveZoom,
     safeArea,
     lifecycle,
     error,
