@@ -14,6 +14,8 @@ import {
 import { CUSTOM_DEVICE_ID } from '../types';
 import type { PreviewLifecycle, ZoomMode } from '../types';
 import type { ViewportToolsState } from '../viewTools';
+import type { ScreenshotStatus } from '../../screenshot';
+import { ScreenshotButton } from './ScreenshotButton';
 
 interface PreviewToolbarProps {
   url: string;
@@ -53,6 +55,12 @@ interface PreviewToolbarProps {
   viewTools?: ViewportToolsState;
   /** Called when a viewport tool is toggled. */
   onToggleViewTool?: (key: keyof ViewportToolsState) => void;
+  /** Called when the user requests a screenshot of this preview. */
+  onScreenshot?: () => void;
+  /** Latest screenshot status, surfaced for honesty about unsupported cases. */
+  screenshotStatus?: ScreenshotStatus | null;
+  /** True while a screenshot capture is in flight. */
+  screenshotBusy?: boolean;
 }
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
@@ -219,6 +227,9 @@ export function PreviewToolbar({
   onCustomViewportChange,
   viewTools,
   onToggleViewTool,
+  onScreenshot,
+  screenshotStatus,
+  screenshotBusy,
 }: PreviewToolbarProps) {
   const grouped = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -445,6 +456,16 @@ export function PreviewToolbar({
           />
         </svg>
       </button>
+
+      {/* Screenshot */}
+      {onScreenshot && (
+        <ScreenshotButton
+          hasDevice={hasDevice}
+          isBusy={screenshotBusy ?? false}
+          status={screenshotStatus ?? null}
+          onCapture={onScreenshot}
+        />
+      )}
 
       {/* Separator */}
       <div

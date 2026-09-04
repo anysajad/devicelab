@@ -6,6 +6,7 @@ import { ZOOM_MAX, ZOOM_MIN } from '../previewUtils';
 import { usePreview } from '../usePreview';
 import { usePreviewStore } from '../store/usePreviewStore';
 import { usePreviewInspection } from '../inspection/usePreviewInspection';
+import { useScreenshot } from '../useScreenshot';
 import { CUSTOM_DEVICE_ID } from '../types';
 import type {
   PreviewController,
@@ -128,6 +129,9 @@ export function PreviewInstance({
 
   // Run inspection when the workspace toggles inspection active / rescan.
   usePreviewInspection(entry.id, controller);
+
+  // Per-instance screenshot capture (reads controller only; non-mutating).
+  const screenshot = useScreenshot(controller);
 
   // Load when effective configuration actually changes.
   useEffect(() => {
@@ -300,6 +304,9 @@ export function PreviewInstance({
         onCustomViewportChange={handleCustomViewportChange}
         viewTools={tools}
         onToggleViewTool={toggleTool}
+        onScreenshot={screenshot.capture}
+        screenshotStatus={screenshot.status}
+        screenshotBusy={screenshot.isBusy}
       />
 
       {/* Preview area */}

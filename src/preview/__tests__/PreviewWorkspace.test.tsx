@@ -309,6 +309,38 @@ describe('PreviewToolbar', () => {
     render(<PreviewToolbar {...defaultProps} />);
     expect(screen.queryByLabelText('Remove preview')).not.toBeInTheDocument();
   });
+
+  it('does not render a screenshot button when onScreenshot is not provided', () => {
+    render(<PreviewToolbar {...defaultProps} />);
+    expect(
+      screen.queryByLabelText('Capture screenshot')
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders a screenshot button when onScreenshot is provided', () => {
+    render(<PreviewToolbar {...defaultProps} onScreenshot={vi.fn()} />);
+    expect(screen.getByLabelText('Capture screenshot')).toBeInTheDocument();
+  });
+
+  it('triggers onScreenshot when clicked', async () => {
+    const onScreenshot = vi.fn();
+    render(<PreviewToolbar {...defaultProps} onScreenshot={onScreenshot} />);
+    await userEvent.click(screen.getByLabelText('Capture screenshot'));
+    expect(onScreenshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces screenshot status honestly on the button', () => {
+    render(
+      <PreviewToolbar
+        {...defaultProps}
+        onScreenshot={vi.fn()}
+        screenshotStatus="cross-origin"
+      />
+    );
+    // The screenshot-specific status (scope by content, toolbar has its own role=status).
+    const labels = screen.getAllByRole('status').map((el) => el.textContent);
+    expect(labels).toContain('Unavailable (cross-origin)');
+  });
 });
 
 // --- PreviewWorkspace integration tests ---

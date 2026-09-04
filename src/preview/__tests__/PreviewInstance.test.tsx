@@ -50,6 +50,47 @@ describe('PreviewInstance', () => {
     usePreviewStore.getState().reset();
   });
 
+  it('renders a screenshot button wired to the instance toolbar', () => {
+    render(
+      <PreviewInstance
+        entry={iphoneEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    // The screenshot button is present (useScreenshot wiring active).
+    expect(screen.getByLabelText('Capture screenshot')).toBeInTheDocument();
+  });
+
+  it('surfaces an honest screenshot status after a capture attempt', async () => {
+    render(
+      <PreviewInstance
+        entry={iphoneEntry}
+        sharedUrl="https://example.com"
+        onRemove={vi.fn()}
+      />
+    );
+    // jsdom cannot rasterize: the attempt must resolve to an honest status
+    // (not-ready or render-failed), never a misleading PNG or a crash.
+    await userEvent.click(screen.getByLabelText('Capture screenshot'));
+    const labels = (await screen.findAllByRole('status')).map(
+      (el) => el.textContent
+    );
+    expect([
+      'Preview not ready',
+      'Capture failed',
+      'Unavailable (cross-origin)',
+    ]).toHaveLength(3);
+    const screenshotLabel = labels.find((l) =>
+      [
+        'Preview not ready',
+        'Capture failed',
+        'Unavailable (cross-origin)',
+      ].includes(l ?? '')
+    );
+    expect(screenshotLabel).toBeTruthy();
+  });
+
   it('renders the device selector with the correct device', () => {
     render(
       <PreviewInstance
