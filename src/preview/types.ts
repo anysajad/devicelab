@@ -4,6 +4,8 @@ import type {
   SafeAreaInsets,
 } from '@/devices';
 
+export type { DeviceOrientation } from '@/devices';
+
 /** Lifecycle state of the preview iframe. */
 export type PreviewLifecycle = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -64,4 +66,21 @@ export interface PreviewController {
   zoomOut(): void;
   /** Switch between 'fit' and 'manual' zoom modes. */
   setZoomMode(mode: ZoomMode): void;
+}
+
+// --- Multi-device workspace types ---
+
+/** Unique identifier for a preview instance. */
+export type PreviewInstanceId = string;
+
+/** Layout mode for the multi-device workspace. */
+export type LayoutMode = 'grid' | 'focus';
+
+/** A single preview entry in the workspace collection. */
+export interface PreviewEntry {
+  readonly id: PreviewInstanceId;
+  readonly deviceId: string;
+  readonly orientation: DeviceOrientation;
+  /** If set, overrides the workspace shared URL for this preview. */
+  readonly customUrl?: string;
 }

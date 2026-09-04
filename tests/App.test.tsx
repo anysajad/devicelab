@@ -12,7 +12,7 @@ describe('App', () => {
   it('renders the preview workspace', () => {
     render(<App />)
     expect(
-      screen.getByLabelText('Target URL'),
+      screen.getByLabelText('Shared preview URL'),
     ).toBeInTheDocument()
   })
 

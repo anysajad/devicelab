@@ -1,7 +1,10 @@
 export type {
   ComputedViewport,
+  LayoutMode,
   PreviewConfig,
   PreviewController,
+  PreviewEntry,
+  PreviewInstanceId,
   PreviewLifecycle,
   PreviewState,
   ZoomMode,
@@ -22,4 +25,9 @@ export {
 export { createPreviewController } from './previewEngine';
 export { usePreview } from './usePreview';
 export type { UsePreviewReturn } from './usePreview';
+export { usePreviewStore } from './store/usePreviewStore';
+export type {
+  PreviewCollectionActions,
+  PreviewCollectionState,
+} from './store/usePreviewStore';
 export { PreviewWorkspace } from './components/PreviewWorkspace';

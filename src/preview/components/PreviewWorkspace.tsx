@@ -1,193 +1,128 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 
-import { getDeviceById } from '@/devices';
-import { ZOOM_MAX, ZOOM_MIN } from '../previewUtils';
-import { usePreview } from '../usePreview';
-import { PreviewFrame } from './PreviewFrame';
-import { PreviewToolbar } from './PreviewToolbar';
-
-const DEFAULT_DEVICE_ID = 'iphone-15';
+import { usePreviewStore } from '../store/usePreviewStore';
+import { PreviewInstance } from './PreviewInstance';
+import { PreviewThumbnail } from './PreviewThumbnail';
+import { WorkspaceToolbar } from './WorkspaceToolbar';
 
 export function PreviewWorkspace() {
-  const {
-    state,
-    containerRef,
-    load,
-    setDevice,
-    setOrientation,
-    reload,
-    zoomIn,
-    zoomOut,
-    fitToContainer,
-  } = usePreview();
+  const entries = usePreviewStore((s) => s.entries);
+  const sharedUrl = usePreviewStore((s) => s.sharedUrl);
+  const activeId = usePreviewStore((s) => s.activeId);
+  const layoutMode = usePreviewStore((s) => s.layoutMode);
+  const lifecycleStatus = usePreviewStore((s) => s.lifecycleStatus);
+  const removeEntry = usePreviewStore((s) => s.removeEntry);
+  const setActiveId = usePreviewStore((s) => s.setActiveId);
 
-  const [url, setUrl] = useState('');
-  const [selectedDeviceId, setSelectedDeviceId] = useState(DEFAULT_DEVICE_ID);
-  const previewAreaRef = useRef<HTMLDivElement>(null);
+  const hasEntries = entries.length > 0;
 
-  const device = getDeviceById(selectedDeviceId);
-  const hasDevice = device !== undefined;
-
-  const handleSubmitUrl = useCallback(() => {
-    if (!device || url.trim().length === 0) return;
-    load(url, device);
-  }, [device, url, load]);
-
-  const handleDeviceChange = useCallback(
-    (deviceId: string) => {
-      setSelectedDeviceId(deviceId);
-      const newDevice = getDeviceById(deviceId);
-      if (newDevice && state.config.url) {
-        setDevice(newDevice);
+  // Ensure activeId is valid when in focus mode.
+  useEffect(() => {
+    if (layoutMode === 'focus' && hasEntries) {
+      const activeExists = entries.some((e) => e.id === activeId);
+      if (!activeExists) {
+        setActiveId(entries[0]!.id);
       }
-    },
-    [state.config.url, setDevice]
-  );
-
-  const handleOrientationChange = useCallback(
-    (orientation: 'portrait' | 'landscape') => {
-      setOrientation(orientation);
-    },
-    [setOrientation]
-  );
-
-  const handleFit = useCallback(() => {
-    fitToContainer();
-    // Also scroll to top-left for a clean view
-    const area = previewAreaRef.current;
-    if (area) {
-      area.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
     }
-  }, [fitToContainer]);
+  }, [layoutMode, hasEntries, entries, activeId, setActiveId]);
 
-  const canZoomIn = state.effectiveZoom < ZOOM_MAX;
-  const canZoomOut = state.effectiveZoom > ZOOM_MIN;
-  const hasLoaded = state.lifecycle !== 'idle';
+  const handleRemove = useCallback(
+    (id: string) => {
+      removeEntry(id);
+    },
+    [removeEntry]
+  );
+
+  const handleThumbnailClick = useCallback(
+    (id: string) => {
+      setActiveId(id);
+    },
+    [setActiveId]
+  );
+
+  // Get the active entry for focus mode
+  const activeEntry =
+    activeId != null ? entries.find((e) => e.id === activeId) : null;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <PreviewToolbar
-        url={url}
-        onUrlChange={setUrl}
-        onUrlSubmit={handleSubmitUrl}
-        selectedDeviceId={selectedDeviceId}
-        onDeviceChange={handleDeviceChange}
-        orientation={state.config.orientation}
-        supportedOrientations={device?.orientations ?? []}
-        onOrientationChange={handleOrientationChange}
-        onReload={reload}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onFit={handleFit}
-        effectiveZoom={state.effectiveZoom}
-        zoomMode={state.zoomMode}
-        canZoomIn={canZoomIn}
-        canZoomOut={canZoomOut}
-        viewportWidth={state.viewport.width}
-        viewportHeight={state.viewport.height}
-        devicePixelRatio={device?.devicePixelRatio ?? 0}
-        lifecycle={state.lifecycle}
-        hasDevice={hasDevice}
-      />
+      <WorkspaceToolbar hasEntries={hasEntries} />
 
-      {/* Preview area — scroll container */}
-      <div
-        ref={previewAreaRef}
-        className="flex flex-1 items-center justify-center overflow-auto bg-gray-100 dark:bg-gray-950"
-      >
-        {/* Inner wrapper — centers content when smaller, allows scroll when larger */}
-        <div className="flex min-w-full min-h-full items-center justify-center p-4">
-          {/* Idle state — guidance */}
-          {!hasLoaded && (
-            <div className="flex flex-col items-center gap-3 text-gray-400 dark:text-gray-500">
-              <svg
-                className="h-12 w-12"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
-                />
-              </svg>
-              <p className="text-sm">
-                Enter a URL above and select a device to start previewing
-              </p>
-            </div>
-          )}
-
-          {/* Loading overlay */}
-          {state.lifecycle === 'loading' && (
-            <div
-              className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-gray-950/80"
-              role="alert"
-              aria-live="assertive"
+      {/* Empty state */}
+      {!hasEntries && (
+        <div className="flex flex-1 items-center justify-center bg-gray-100 dark:bg-gray-950">
+          <div className="flex flex-col items-center gap-3 text-gray-400 dark:text-gray-500">
+            <svg
+              className="h-12 w-12"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1}
             >
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-500" />
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Loading preview...
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Error overlay */}
-          {state.lifecycle === 'error' && (
-            <div
-              className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-gray-950/90"
-              role="alert"
-              aria-live="assertive"
-            >
-              <div className="flex flex-col items-center gap-4 rounded-xl border border-red-200 bg-white p-6 shadow-sm dark:border-red-900 dark:bg-gray-900">
-                <svg
-                  className="h-10 w-10 text-red-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                  />
-                </svg>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Failed to load preview
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {state.error ??
-                      'The URL may be unreachable or blocked by CORS/CSP headers.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={reload}
-                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Preview frame — shown when a device is selected and URL is loaded */}
-          {hasDevice && hasLoaded && state.lifecycle !== 'error' && (
-            <PreviewFrame
-              containerRef={containerRef}
-              viewport={state.viewport}
-              effectiveZoom={state.effectiveZoom}
-              safeArea={state.safeArea}
-              deviceName={device.name}
-            />
-          )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
+            </svg>
+            <p className="text-sm">Add a device above to start previewing</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Grid mode */}
+      {hasEntries && layoutMode === 'grid' && (
+        <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 overflow-auto p-4">
+          {entries.map((entry) => (
+            <div
+              key={entry.id}
+              className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+            >
+              <PreviewInstance
+                entry={entry}
+                sharedUrl={sharedUrl}
+                onRemove={handleRemove}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Focus mode */}
+      {hasEntries && layoutMode === 'focus' && (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Main preview area */}
+          <div className="flex flex-1 items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-gray-950">
+            {activeEntry ? (
+              <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                <PreviewInstance
+                  key={activeEntry.id}
+                  entry={activeEntry}
+                  sharedUrl={sharedUrl}
+                  onRemove={handleRemove}
+                />
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400 dark:text-gray-500">
+                No preview selected
+              </div>
+            )}
+          </div>
+
+          {/* Thumbnail strip */}
+          <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+            {entries.map((entry) => (
+              <PreviewThumbnail
+                key={entry.id}
+                entry={entry}
+                isActive={entry.id === activeId}
+                lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
+                onClick={() => handleThumbnailClick(entry.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -299,4 +299,170 @@ describe('PreviewToolbar', () => {
     render(<PreviewToolbar {...defaultProps} hasDevice={false} />);
     expect(screen.queryByText('393 × 852 · 3×')).not.toBeInTheDocument();
   });
+
+  it('renders remove button when onRemove provided', () => {
+    render(<PreviewToolbar {...defaultProps} onRemove={vi.fn()} />);
+    expect(screen.getByLabelText('Remove preview')).toBeInTheDocument();
+  });
+
+  it('does not render remove button when onRemove not provided', () => {
+    render(<PreviewToolbar {...defaultProps} />);
+    expect(screen.queryByLabelText('Remove preview')).not.toBeInTheDocument();
+  });
+});
+
+// --- PreviewWorkspace integration tests ---
+
+// Mock ResizeObserver for workspace tests
+class MockResizeObserver {
+  callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).ResizeObserver = MockResizeObserver;
+}
+
+import { beforeEach } from 'vitest';
+import { PreviewWorkspace } from '../components/PreviewWorkspace';
+import { usePreviewStore } from '../store/usePreviewStore';
+
+describe('PreviewWorkspace (multi-device)', () => {
+  beforeEach(() => {
+    usePreviewStore.getState().reset();
+  });
+
+  it('shows empty state when no entries', () => {
+    render(<PreviewWorkspace />);
+    expect(
+      screen.getByText('Add a device above to start previewing')
+    ).toBeInTheDocument();
+  });
+
+  it('renders workspace toolbar', () => {
+    render(<PreviewWorkspace />);
+    expect(screen.getByLabelText('Shared preview URL')).toBeInTheDocument();
+    expect(screen.getByLabelText('Add device')).toBeInTheDocument();
+  });
+
+  it('shows layout toggle when entries exist', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+    expect(screen.getByLabelText('Grid layout')).toBeInTheDocument();
+    expect(screen.getByLabelText('Focus layout')).toBeInTheDocument();
+  });
+
+  it('hides layout toggle when no entries', () => {
+    render(<PreviewWorkspace />);
+    expect(screen.queryByLabelText('Grid layout')).not.toBeInTheDocument();
+  });
+
+  it('renders preview instances in grid mode', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    render(<PreviewWorkspace />);
+    // Both devices should appear
+    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
+    expect(screen.getByText('iPad')).toBeInTheDocument();
+  });
+
+  it('renders only active instance in focus mode', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+    render(<PreviewWorkspace />);
+    // Active preview (iPhone 15) should appear as PreviewInstance (has PreviewToolbar)
+    // iPad should appear as thumbnail only (no PreviewToolbar)
+    expect(screen.getByLabelText('Preview controls')).toBeInTheDocument();
+    // Thumbnail should show iPad
+    expect(screen.getByLabelText('iPad preview')).toBeInTheDocument();
+  });
+
+  it('renders thumbnails for all entries in focus mode', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+    render(<PreviewWorkspace />);
+    // Both should appear as thumbnails (accessible by label)
+    expect(
+      screen.getByLabelText('iPhone 15 preview (active)')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('iPad preview')).toBeInTheDocument();
+  });
+
+  it('switching focus to a thumbnail changes active preview', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+    render(<PreviewWorkspace />);
+
+    // Click the iPad thumbnail
+    await userEvent.click(screen.getByLabelText('iPad preview'));
+
+    // iPad should now be the active PreviewInstance
+    expect(screen.getByLabelText('iPad preview (active)')).toBeInTheDocument();
+  });
+
+  it('layout toggle switches between grid and focus', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    // Initially grid mode
+    expect(screen.getByLabelText('Grid layout')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    // Switch to focus
+    await userEvent.click(screen.getByLabelText('Focus layout'));
+    expect(screen.getByLabelText('Focus layout')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('single preview behaves like current single-preview', () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+    // Should render the preview with device controls
+    expect(screen.getByText('iPhone 15')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reload preview')).toBeInTheDocument();
+  });
+
+  it('add device creates new entry', async () => {
+    render(<PreviewWorkspace />);
+
+    // Click add device
+    await userEvent.click(screen.getByLabelText('Add device'));
+
+    // Select iPhone 15
+    await userEvent.click(screen.getByText('iPhone 15'));
+
+    // Entry should be created
+    expect(usePreviewStore.getState().entries).toHaveLength(1);
+    expect(usePreviewStore.getState().entries[0]?.deviceId).toBe('iphone-15');
+  });
+
+  it('remove entry removes from store', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    // Click remove button
+    await userEvent.click(screen.getByLabelText('Remove preview'));
+
+    expect(usePreviewStore.getState().entries).toHaveLength(0);
+  });
+
+  it('empty workspace shows add instruction', () => {
+    render(<PreviewWorkspace />);
+    expect(
+      screen.getByText('Add a device above to start previewing')
+    ).toBeInTheDocument();
+  });
 });
