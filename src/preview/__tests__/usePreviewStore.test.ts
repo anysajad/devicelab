@@ -359,4 +359,151 @@ describe('usePreviewStore', () => {
       expect(usePreviewStore.getState().activeId).toBe(id1);
     });
   });
+
+  // --- Inspection tests ---
+
+  describe('setInspectionResult', () => {
+    it('stores a snapshot for a preview entry', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 42,
+      });
+      const snap = usePreviewStore.getState().inspectionResults[id];
+      expect(snap?.phase).toBe('ready');
+      expect(snap?.elementsScanned).toBe(42);
+    });
+
+    it('overwrites a previous snapshot', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'running',
+      });
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 2000,
+        diagnostics: [],
+        elementsScanned: 10,
+      });
+      expect(usePreviewStore.getState().inspectionResults[id]!.phase).toBe(
+        'ready'
+      );
+    });
+
+    it('isolates results between entries', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setInspectionResult(id1, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 5,
+      });
+      usePreviewStore.getState().setInspectionResult(id2, {
+        phase: 'inaccessible',
+        inaccessibleReason: 'cross-origin',
+      });
+      expect(usePreviewStore.getState().inspectionResults[id1]!.phase).toBe(
+        'ready'
+      );
+      expect(usePreviewStore.getState().inspectionResults[id2]!.phase).toBe(
+        'inaccessible'
+      );
+    });
+  });
+
+  describe('removeEntry clears inspection results', () => {
+    it('removes inspection result for the deleted entry', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 10,
+      });
+      usePreviewStore.getState().removeEntry(id);
+      expect(usePreviewStore.getState().inspectionResults[id]).toBeUndefined();
+    });
+
+    it('does not remove inspection results for other entries', () => {
+      const id1 = usePreviewStore.getState().addEntry('iphone-15');
+      const id2 = usePreviewStore.getState().addEntry('ipad');
+      usePreviewStore.getState().setInspectionResult(id1, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 10,
+      });
+      usePreviewStore.getState().setInspectionResult(id2, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 20,
+      });
+      usePreviewStore.getState().removeEntry(id1);
+      expect(usePreviewStore.getState().inspectionResults[id2]).toBeDefined();
+    });
+  });
+
+  describe('reset clears inspection results', () => {
+    it('clears inspectionResults', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 5,
+      });
+      usePreviewStore.getState().reset();
+      expect(usePreviewStore.getState().inspectionResults).toEqual({});
+    });
+  });
+
+  describe('inspectionActive and requestInspection', () => {
+    it('starts inactive', () => {
+      expect(usePreviewStore.getState().inspectionActive).toBe(false);
+    });
+
+    it('setInspectionActive(true) activates', () => {
+      usePreviewStore.getState().setInspectionActive(true);
+      expect(usePreviewStore.getState().inspectionActive).toBe(true);
+    });
+
+    it('setInspectionActive(false) deactivates and clears results', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionActive(true);
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 1000,
+        diagnostics: [],
+        elementsScanned: 5,
+      });
+      usePreviewStore.getState().setInspectionActive(false);
+      expect(usePreviewStore.getState().inspectionActive).toBe(false);
+      expect(usePreviewStore.getState().inspectionResults).toEqual({});
+    });
+
+    it('setInspectionActive is idempotent', () => {
+      usePreviewStore.getState().setInspectionActive(true);
+      const stateBefore = usePreviewStore.getState();
+      usePreviewStore.getState().setInspectionActive(true);
+      expect(usePreviewStore.getState()).toBe(stateBefore);
+    });
+
+    it('requestInspection activates and bumps the token', () => {
+      expect(usePreviewStore.getState().inspectionRequest).toBe(0);
+      usePreviewStore.getState().requestInspection();
+      expect(usePreviewStore.getState().inspectionActive).toBe(true);
+      expect(usePreviewStore.getState().inspectionRequest).toBe(1);
+    });
+
+    it('requestInspection bumps token when already active', () => {
+      usePreviewStore.getState().setInspectionActive(true);
+      usePreviewStore.getState().requestInspection();
+      expect(usePreviewStore.getState().inspectionActive).toBe(true);
+      expect(usePreviewStore.getState().inspectionRequest).toBe(1);
+    });
+  });
 });

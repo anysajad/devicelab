@@ -5,8 +5,13 @@ import { getDeviceById } from '@/devices';
 import { ZOOM_MAX, ZOOM_MIN } from '../previewUtils';
 import { usePreview } from '../usePreview';
 import { usePreviewStore } from '../store/usePreviewStore';
+import { usePreviewInspection } from '../inspection/usePreviewInspection';
 import { CUSTOM_DEVICE_ID } from '../types';
-import type { PreviewEntry } from '../types';
+import type {
+  PreviewController,
+  PreviewEntry,
+  PreviewInstanceId,
+} from '../types';
 import { PreviewFrame } from './PreviewFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 
@@ -14,6 +19,11 @@ interface PreviewInstanceProps {
   entry: PreviewEntry;
   sharedUrl: string;
   onRemove?: (id: string) => void;
+  /** Notify the parent workspace when this instance's controller becomes available. */
+  onControllerReady?: (
+    id: PreviewInstanceId,
+    controller: PreviewController | null
+  ) => void;
 }
 
 /**
@@ -61,6 +71,7 @@ export function PreviewInstance({
   entry,
   sharedUrl,
   onRemove,
+  onControllerReady,
 }: PreviewInstanceProps) {
   const updateEntry = usePreviewStore((s) => s.updateEntry);
   const updateLifecycleStatus = usePreviewStore((s) => s.updateLifecycleStatus);
@@ -96,6 +107,17 @@ export function PreviewInstance({
   } | null>(null);
 
   const { controller } = usePreview();
+
+  // Register this instance's controller with the workspace so the diagnostics
+  // panel can resolve iframes for highlighting. Fires once per mount; stable
+  // across re-renders (controller is created once in usePreview).
+  useEffect(() => {
+    onControllerReady?.(entry.id, controller);
+    return () => onControllerReady?.(entry.id, null);
+  }, [entry.id, controller, onControllerReady]);
+
+  // Run inspection when the workspace toggles inspection active / rescan.
+  usePreviewInspection(entry.id, controller);
 
   // Load when effective configuration actually changes.
   useEffect(() => {

@@ -3,6 +3,7 @@ import type {
   DeviceOrientation,
   SafeAreaInsets,
 } from '@/devices';
+import type { Diagnostic } from '@/inspection';
 
 export type { DeviceOrientation } from '@/devices';
 
@@ -99,4 +100,40 @@ export interface PreviewEntry {
   readonly customViewportWidth?: number;
   /** Custom viewport height in CSS pixels (only used when viewportMode === 'custom'). */
   readonly customViewportHeight?: number;
+}
+
+// --- Diagnostics / inspection state ---
+
+/** Phase of a per-preview inspection run. */
+export type InspectionPhase =
+  'idle' | 'running' | 'ready' | 'inaccessible' | 'error';
+
+/** Inaccessible reason surfaced to the diagnostics UI. Mirrors the inspection engine. */
+export type InspectionInaccessibleReason =
+  'cross-origin' | 'contentDocument-unavailable';
+
+/**
+ * Rendering-safe snapshot of one preview's inspection result.
+ *
+ * Deliberately stores the serializable Diagnostic[] (never live DOM refs)
+ * so it can live in the Zustand store and be read by the diagnostics panel,
+ * which is a sibling of the PreviewInstance that performed the inspection.
+ */
+export interface PreviewInspectionSnapshot {
+  /** Current inspection phase. */
+  phase: InspectionPhase;
+  /** Timestamp of the inspection attempt. */
+  inspectedAt?: number;
+  /** Diagnostics produced (only populated when phase === 'ready'). */
+  diagnostics?: readonly Diagnostic[];
+  /** Number of DOM elements scanned. */
+  elementsScanned?: number;
+  /** True if the DOM exceeded the scan bound and inspection was limited. */
+  largeDom?: boolean;
+  /** Per-checker failures, if any checker threw. */
+  checkerFailures?: readonly { message: string }[];
+  /** Human-readable error description (phase === 'error'). */
+  errorMessage?: string;
+  /** Why inspection was not possible (phase === 'inaccessible'). */
+  inaccessibleReason?: InspectionInaccessibleReason;
 }

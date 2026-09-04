@@ -1,7 +1,10 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { usePreviewStore } from '../store/usePreviewStore';
+import { clearHighlight } from '../inspection/highlight';
+import type { PreviewController, PreviewInstanceId } from '../types';
 import { CompareThumbnail } from './CompareThumbnail';
+import { InspectionsPanel } from './InspectionsPanel';
 import { PreviewInstance } from './PreviewInstance';
 import { PreviewThumbnail } from './PreviewThumbnail';
 import { WorkspaceToolbar } from './WorkspaceToolbar';
@@ -16,6 +19,39 @@ export function PreviewWorkspace() {
   const removeEntry = usePreviewStore((s) => s.removeEntry);
   const setActiveId = usePreviewStore((s) => s.setActiveId);
   const toggleCompareEntry = usePreviewStore((s) => s.toggleCompareEntry);
+  const inspectionActive = usePreviewStore((s) => s.inspectionActive);
+  const setInspectionActive = usePreviewStore((s) => s.setInspectionActive);
+
+  // Stable controller registry. Updated by each PreviewInstance on mount/unmount
+  // so the diagnostics panel can resolve iframes for highlighting without
+  // prop drilling through the workspace.
+  const controllersRef = useRef<Map<PreviewInstanceId, PreviewController>>(
+    new Map()
+  );
+
+  const handleControllerReady = useCallback(
+    (id: PreviewInstanceId, ctrl: PreviewController | null) => {
+      if (ctrl) controllersRef.current.set(id, ctrl);
+      else controllersRef.current.delete(id);
+    },
+    []
+  );
+
+  const getController = useCallback(
+    (id: PreviewInstanceId) => controllersRef.current.get(id),
+    []
+  );
+
+  const handleClosePanel = useCallback(() => {
+    // Clear any active highlights in the preview iframes.
+    const entriesSnapshot = usePreviewStore.getState().entries;
+    for (const entry of entriesSnapshot) {
+      const controller = controllersRef.current.get(entry.id);
+      const doc = controller?.getIframe()?.contentDocument;
+      if (doc) clearHighlight(doc);
+    }
+    setInspectionActive(false);
+  }, [setInspectionActive]);
 
   const hasEntries = entries.length > 0;
 
@@ -77,67 +113,14 @@ export function PreviewWorkspace() {
         </div>
       )}
 
-      {/* Grid mode */}
-      {hasEntries && layoutMode === 'grid' && (
-        <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 overflow-auto p-4">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-            >
-              <PreviewInstance
-                entry={entry}
-                sharedUrl={sharedUrl}
-                onRemove={handleRemove}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Focus mode */}
-      {hasEntries && layoutMode === 'focus' && (
+      {/* Content area — split between previews and diagnostics panel */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Workspace with previews */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Main preview area */}
-          <div className="flex flex-1 items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-gray-950">
-            {activeEntry ? (
-              <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                <PreviewInstance
-                  key={activeEntry.id}
-                  entry={activeEntry}
-                  sharedUrl={sharedUrl}
-                  onRemove={handleRemove}
-                />
-              </div>
-            ) : (
-              <div className="text-sm text-gray-400 dark:text-gray-500">
-                No preview selected
-              </div>
-            )}
-          </div>
-
-          {/* Thumbnail strip */}
-          <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
-            {entries.map((entry) => (
-              <PreviewThumbnail
-                key={entry.id}
-                entry={entry}
-                isActive={entry.id === activeId}
-                lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
-                onClick={() => handleThumbnailClick(entry.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Compare mode */}
-      {hasEntries && layoutMode === 'compare' && (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Comparison grid — responsive, scrollable */}
-          <div className="flex flex-1 overflow-auto p-4">
-            <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 content-start">
-              {compareEntries.map((entry) => (
+          {/* Grid mode */}
+          {hasEntries && layoutMode === 'grid' && (
+            <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 overflow-auto p-4">
+              {entries.map((entry) => (
                 <div
                   key={entry.id}
                   className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
@@ -146,26 +129,96 @@ export function PreviewWorkspace() {
                     entry={entry}
                     sharedUrl={sharedUrl}
                     onRemove={handleRemove}
+                    onControllerReady={handleControllerReady}
                   />
                 </div>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* Thumbnail strip — select/deselect for comparison */}
-          <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
-            {entries.map((entry) => (
-              <CompareThumbnail
-                key={entry.id}
-                entry={entry}
-                isSelected={compareEntrySet.has(entry.id)}
-                lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
-                onToggle={() => toggleCompareEntry(entry.id)}
-              />
-            ))}
-          </div>
+          {/* Focus mode */}
+          {hasEntries && layoutMode === 'focus' && (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* Main preview area */}
+              <div className="flex flex-1 items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-gray-950">
+                {activeEntry ? (
+                  <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                    <PreviewInstance
+                      key={activeEntry.id}
+                      entry={activeEntry}
+                      sharedUrl={sharedUrl}
+                      onRemove={handleRemove}
+                      onControllerReady={handleControllerReady}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-400 dark:text-gray-500">
+                    No preview selected
+                  </div>
+                )}
+              </div>
+
+              {/* Thumbnail strip */}
+              <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+                {entries.map((entry) => (
+                  <PreviewThumbnail
+                    key={entry.id}
+                    entry={entry}
+                    isActive={entry.id === activeId}
+                    lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
+                    onClick={() => handleThumbnailClick(entry.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Compare mode */}
+          {hasEntries && layoutMode === 'compare' && (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* Comparison grid — responsive, scrollable */}
+              <div className="flex flex-1 overflow-auto p-4">
+                <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 content-start">
+                  {compareEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+                    >
+                      <PreviewInstance
+                        entry={entry}
+                        sharedUrl={sharedUrl}
+                        onRemove={handleRemove}
+                        onControllerReady={handleControllerReady}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Thumbnail strip — select/deselect for comparison */}
+              <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+                {entries.map((entry) => (
+                  <CompareThumbnail
+                    key={entry.id}
+                    entry={entry}
+                    isSelected={compareEntrySet.has(entry.id)}
+                    lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
+                    onToggle={() => toggleCompareEntry(entry.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Diagnostics panel (right side) */}
+        {inspectionActive && (
+          <InspectionsPanel
+            getController={getController}
+            onClose={handleClosePanel}
+          />
+        )}
+      </div>
     </div>
   );
 }

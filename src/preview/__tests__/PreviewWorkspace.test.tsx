@@ -917,4 +917,50 @@ describe('PreviewWorkspace (multi-device)', () => {
 
     expect(screen.getByLabelText('Layout mode')).toBeInTheDocument();
   });
+
+  // --- Inspection / diagnostics integration ---
+
+  it('shows Inspect button only when entries exist', () => {
+    const { unmount } = render(<PreviewWorkspace />);
+    expect(screen.queryByLabelText('Inspect')).not.toBeInTheDocument();
+
+    unmount();
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+    expect(screen.getByLabelText('Inspect')).toBeInTheDocument();
+  });
+
+  it('clicking Inspect activates inspection and opens the panel', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Inspect'));
+
+    expect(usePreviewStore.getState().inspectionActive).toBe(true);
+    expect(screen.getByLabelText('Inspection results')).toBeInTheDocument();
+  });
+
+  it('clicking Inspect again deactivates and closes the panel', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Inspect'));
+    expect(screen.getByLabelText('Inspection results')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText('Inspect'));
+    expect(usePreviewStore.getState().inspectionActive).toBe(false);
+    expect(
+      screen.queryByLabelText('Inspection results')
+    ).not.toBeInTheDocument();
+  });
+
+  it('closing the panel via its close button deactivates inspection', async () => {
+    usePreviewStore.getState().addEntry('iphone-15');
+    render(<PreviewWorkspace />);
+
+    await userEvent.click(screen.getByLabelText('Inspect'));
+    await userEvent.click(screen.getByLabelText('Close inspection panel'));
+
+    expect(usePreviewStore.getState().inspectionActive).toBe(false);
+  });
 });

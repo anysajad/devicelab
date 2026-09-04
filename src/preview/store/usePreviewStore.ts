@@ -5,6 +5,7 @@ import type {
   LayoutMode,
   PreviewEntry,
   PreviewInstanceId,
+  PreviewInspectionSnapshot,
   PreviewLifecycle,
 } from '../types';
 
@@ -49,6 +50,12 @@ export interface PreviewCollectionState {
   compareIds: PreviewInstanceId[];
   /** Lightweight lifecycle status per entry, updated by PreviewInstance. */
   lifecycleStatus: Record<PreviewInstanceId, PreviewLifecycle>;
+  /** Per-preview inspection results, keyed by entry ID. Empty = no inspection yet. */
+  inspectionResults: Record<PreviewInstanceId, PreviewInspectionSnapshot>;
+  /** Whether the workspace-level Inspection panel/toggle is active. */
+  inspectionActive: boolean;
+  /** Monotonic token bumped on each Inspect/Rescan so visible previews re-run. */
+  inspectionRequest: number;
 }
 
 export interface PreviewCollectionActions {
@@ -85,6 +92,15 @@ export interface PreviewCollectionActions {
     id: PreviewInstanceId,
     lifecycle: PreviewLifecycle
   ) => void;
+  /** Record the inspection result snapshot for a preview entry. */
+  setInspectionResult: (
+    id: PreviewInstanceId,
+    snapshot: PreviewInspectionSnapshot
+  ) => void;
+  /** Toggle the workspace Inspection mode. Clearing it wipes results. */
+  setInspectionActive: (active: boolean) => void;
+  /** Ask the visible previews to re-run inspection. */
+  requestInspection: () => void;
   /** Reset to clean initial state. */
   reset: () => void;
 
@@ -107,6 +123,9 @@ const INITIAL_STATE: PreviewCollectionState = {
   layoutMode: 'grid',
   compareIds: [],
   lifecycleStatus: {},
+  inspectionResults: {},
+  inspectionActive: false,
+  inspectionRequest: 0,
 };
 
 export const usePreviewStore = create<
@@ -135,6 +154,9 @@ export const usePreviewStore = create<
       const newLifecycleStatus = Object.fromEntries(
         Object.entries(state.lifecycleStatus).filter(([key]) => key !== id)
       );
+      const newInspectionResults = Object.fromEntries(
+        Object.entries(state.inspectionResults).filter(([key]) => key !== id)
+      );
 
       // Clean up activeId if the removed entry was active
       let newActiveId = state.activeId;
@@ -155,6 +177,7 @@ export const usePreviewStore = create<
         entries: newEntries,
         activeId: newActiveId,
         lifecycleStatus: newLifecycleStatus,
+        inspectionResults: newInspectionResults,
         compareIds: newCompareIds,
         layoutMode: newLayoutMode,
       };
@@ -189,6 +212,36 @@ export const usePreviewStore = create<
         lifecycleStatus: { ...state.lifecycleStatus, [id]: lifecycle },
       };
     });
+  },
+
+  setInspectionResult: (id, snapshot) => {
+    set((state) => ({
+      inspectionResults: {
+        ...state.inspectionResults,
+        [id]: snapshot,
+      },
+    }));
+  },
+
+  setInspectionActive: (active) => {
+    set((state) => {
+      if (active === state.inspectionActive) return state;
+      if (!active) {
+        // Wiping results clears active highlights too (panel closes).
+        return {
+          inspectionActive: false,
+          inspectionResults: {},
+        };
+      }
+      return { inspectionActive: true };
+    });
+  },
+
+  requestInspection: () => {
+    set((state) => ({
+      inspectionActive: true,
+      inspectionRequest: state.inspectionRequest + 1,
+    }));
   },
 
   reset: () => {

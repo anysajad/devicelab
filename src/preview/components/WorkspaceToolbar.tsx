@@ -27,6 +27,9 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
   const addEntry = usePreviewStore((s) => s.addEntry);
   const enterCompareMode = usePreviewStore((s) => s.enterCompareMode);
   const exitCompareMode = usePreviewStore((s) => s.exitCompareMode);
+  const inspectionActive = usePreviewStore((s) => s.inspectionActive);
+  const requestInspection = usePreviewStore((s) => s.requestInspection);
+  const setInspectionActive = usePreviewStore((s) => s.setInspectionActive);
 
   const [urlInput, setUrlInput] = useState(sharedUrl);
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -70,6 +73,14 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
       enterCompareMode();
     }
   }, [layoutMode, enterCompareMode, exitCompareMode]);
+
+  const handleInspectToggle = useCallback(() => {
+    if (inspectionActive) {
+      setInspectionActive(false);
+    } else {
+      requestInspection();
+    }
+  }, [inspectionActive, requestInspection, setInspectionActive]);
 
   const canCompare = hasEntries && entries.length >= 2;
 
@@ -240,6 +251,42 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
             </svg>
           </button>
         </div>
+      )}
+
+      {/* Separator before Inspect button */}
+      {hasEntries && (
+        <>
+          <div
+            className="h-5 w-px bg-gray-200 dark:bg-gray-700"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            onClick={handleInspectToggle}
+            className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              inspectionActive
+                ? 'border-brand-500 bg-brand-500 text-white'
+                : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+            }`}
+            aria-label="Inspect"
+            aria-pressed={inspectionActive}
+          >
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            Inspect
+          </button>
+        </>
       )}
     </nav>
   );

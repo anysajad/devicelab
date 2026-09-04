@@ -1,10 +1,12 @@
 export type {
   ComputedViewport,
+  InspectionPhase,
   LayoutMode,
   PreviewConfig,
   PreviewController,
   PreviewEntry,
   PreviewInstanceId,
+  PreviewInspectionSnapshot,
   PreviewLifecycle,
   PreviewState,
   ViewportMode,
@@ -33,3 +35,4 @@ export type {
   PreviewCollectionState,
 } from './store/usePreviewStore';
 export { PreviewWorkspace } from './components/PreviewWorkspace';
+export { InspectionsPanel } from './components/InspectionsPanel';

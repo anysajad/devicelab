@@ -7,3 +7,11 @@
     @apply m-0 min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
   }
 }
+
+/* Highlight class for inspected elements in same-origin iframes. */
+/* Applied by the diagnostics panel when a user clicks "highlight element". */
+.devicelab-inspect-highlight {
+  outline: 3px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2) !important;
+}
