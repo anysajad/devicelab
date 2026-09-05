@@ -118,6 +118,254 @@ export async function readFrameMetrics(
   }, index);
 }
 
+/**
+ * Wait until a CSS selector resolves to an element inside the preview frame's
+ * document and return its live geometry + computed style. Reads from the top
+ * page via contentDocument so it works for same-origin fixtures only.
+ */
+export interface ElementGeometry {
+  rect: { x: number; y: number; left: number; top: number; right: number; bottom: number; width: number; height: number };
+  scrollWidth: number;
+  scrollHeight: number;
+  clientWidth: number;
+  clientHeight: number;
+  computed: {
+    position: string;
+    display: string;
+    visibility: string;
+    overflowX: string;
+    overflowY: string;
+    whiteSpace: string;
+    width: string;
+    height: string;
+  };
+}
+
+export async function readElementGeometry(
+  page: Page,
+  selector: string,
+  index = 0
+): Promise<ElementGeometry> {
+  return page.evaluate(
+    ([sel, idx]) => {
+      const frames = document.querySelectorAll('iframe[title="Device preview"]');
+      const f = frames[idx] as HTMLIFrameElement | undefined;
+      if (!f || !f.contentDocument) throw new Error('preview frame not ready');
+      const doc = f.contentDocument;
+      const el = doc.querySelector(sel) as HTMLElement | null;
+      if (!el) throw new Error(`element not found in fixture: ${sel}`);
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return {
+        rect: {
+          x: r.x, y: r.y, left: r.left, top: r.top, right: r.right,
+          bottom: r.bottom, width: r.width, height: r.height,
+        },
+        scrollWidth: el.scrollWidth,
+        scrollHeight: el.scrollHeight,
+        clientWidth: el.clientWidth,
+        clientHeight: el.clientHeight,
+        computed: {
+          position: s.position, display: s.display, visibility: s.visibility,
+          overflowX: s.overflowX, overflowY: s.overflowY, whiteSpace: s.whiteSpace,
+          width: s.width, height: s.height,
+        },
+      };
+    },
+    [selector, index] as const
+  );
+}
+
+/**
+ * Fingerprint of the fixture inside the preview frame. Ignores only the
+ * app-injected highlight `<style>` element (whose cleanup is asserted directly),
+ * but INCLUDES the highlight class so callers can prove highlight is the sole
+ * sanctioned mutation and that it cleans up to zero residue.
+ */
+export interface FrameFingerprint {
+  innerWidth: number;
+  innerHeight: number;
+  scrollX: number;
+  scrollY: number;
+  docScrollWidth: number;
+  docClientWidth: number;
+  elements: Array<{
+    tag: string;
+    id: string;
+    cls: string;
+    left: string;
+    top: string;
+    width: string;
+    height: string;
+    scrollWidth: number;
+    scrollHeight: number;
+    clientWidth: number;
+    clientHeight: number;
+    computed: {
+      position: string;
+      display: string;
+      overflowX: string;
+      overflowY: string;
+      whiteSpace: string;
+    };
+  }>;
+}
+
+export async function frameFingerprint(
+  page: Page,
+  index = 0
+): Promise<FrameFingerprint> {
+  return page.evaluate((idx) => {
+    const frames = document.querySelectorAll('iframe[title="Device preview"]');
+    const f = frames[idx] as HTMLIFrameElement | undefined;
+    if (!f || !f.contentDocument || !f.contentWindow) {
+      throw new Error('preview frame not ready');
+    }
+    const doc = f.contentDocument;
+    const win = f.contentWindow;
+    const elements: FrameFingerprint['elements'] = [];
+    for (const el of Array.from(doc.querySelectorAll('*'))) {
+      if (el.id === 'devicelab-inspect-highlight-style') continue;
+      const html = el as HTMLElement;
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(html);
+      elements.push({
+        tag: el.tagName.toLowerCase(),
+        id: el.id,
+        cls: Array.from(el.classList).join(' '),
+        left: r.left.toFixed(1),
+        top: r.top.toFixed(1),
+        width: r.width.toFixed(1),
+        height: r.height.toFixed(1),
+        scrollWidth: el.scrollWidth,
+        scrollHeight: el.scrollHeight,
+        clientWidth: el.clientWidth,
+        clientHeight: el.clientHeight,
+        computed: {
+          position: s.position,
+          display: s.display,
+          overflowX: s.overflowX,
+          overflowY: s.overflowY,
+          whiteSpace: s.whiteSpace,
+        },
+      });
+    }
+    return {
+      innerWidth: win.innerWidth,
+      innerHeight: win.innerHeight,
+      scrollX: win.scrollX,
+      scrollY: win.scrollY,
+      docScrollWidth: doc.documentElement.scrollWidth,
+      docClientWidth: doc.documentElement.clientWidth,
+      elements,
+    };
+  }, index);
+}
+
+/**
+ * Class/computed-outline state of the given selectors inside the preview
+ * frame. Used to assert the highlight is actually rendered (computed outline
+ * solid), not merely applied as a class — the Chromium regression.
+ */
+export interface HighlightState {
+  hasClass: boolean;
+  outlineStyle: string;
+}
+
+export async function frameHighlightState(
+  page: Page,
+  targets: string[],
+  index = 0
+): Promise<Record<string, HighlightState>> {
+  return page.evaluate(
+    ([selList, idx]) => {
+      const frames = document.querySelectorAll('iframe[title="Device preview"]');
+      const f = frames[idx] as HTMLIFrameElement | undefined;
+      if (!f || !f.contentDocument) throw new Error('preview frame not ready');
+      const doc = f.contentDocument;
+      const out: Record<string, HighlightState> = {};
+      for (const sel of selList) {
+        const el = doc.querySelector(sel);
+        out[sel] = {
+          hasClass: !!el?.classList.contains('devicelab-inspect-highlight'),
+          outlineStyle: el ? getComputedStyle(el).outlineStyle : 'none',
+        };
+      }
+      return out;
+    },
+    [targets, index] as const
+  );
+}
+
+/** Whether the app's injected highlight rule is present in the frame. */
+export async function frameHasHighlightStyle(
+  page: Page,
+  index = 0
+): Promise<boolean> {
+  return page.evaluate((idx) => {
+    const frames = document.querySelectorAll('iframe[title="Device preview"]');
+    const f = frames[idx] as HTMLIFrameElement | undefined;
+    return !!(
+      f &&
+      f.contentDocument &&
+      f.contentDocument.getElementById('devicelab-inspect-highlight-style')
+    );
+  }, index);
+}
+
+/**
+ * Normalized diagnostic corpus: header summary badge texts plus, per device
+ * group, the list aria-label and each item's collapsed text. Used to assert
+ * that re-inspection across zoom levels produces identical results.
+ */
+export interface DiagnosticCorpus {
+  badges: string[];
+  groups: Array<{ label: string; items: string[] }>;
+}
+
+export async function diagnosticCorpus(page: Page): Promise<DiagnosticCorpus> {
+  const panel = inspectionsPanel(page).first();
+  return panel.evaluate((node) => {
+    const badges = Array.from(
+      node.querySelectorAll('div[aria-live="polite"] > span')
+    ).map((s) => (s.textContent ?? '').trim());
+    const groups = Array.from(
+      node.querySelectorAll('ul[role="list"][aria-label$=" diagnostics"]')
+    ).map((u) => ({
+      label: u.getAttribute('aria-label') ?? '',
+      items: Array.from(u.querySelectorAll('li')).map((li) =>
+        (li.textContent ?? '').replace(/\s+/g, ' ').trim()
+      ),
+    }));
+    return { badges, groups };
+  });
+}
+
+/** Step the preview zoom (by clicking Zoom in/out) until the label is target%. */
+export async function zoomToManual(
+  page: Page,
+  targetPercent: number,
+  index = 0
+): Promise<void> {
+  const controls = previewControls(page, index);
+  const label = controls.getByText(/^\d+%$/).first();
+  await expect(label).toBeVisible();
+  const read = async () =>
+    parseInt((await label.textContent()) ?? '100', 10);
+  let current = await read();
+  let guard = 0;
+  while (current !== targetPercent && guard < 40) {
+    if (targetPercent > current) {
+      await controls.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    } else {
+      await controls.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    }
+    current = await read();
+    guard += 1;
+  }
+  await expect(label).toHaveText(`${targetPercent}%`);
+}
+
 /** Turn on the workspace Inspect toggle and ensure the panel is visible. */
 export async function startInspection(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Inspect', exact: true }).click();

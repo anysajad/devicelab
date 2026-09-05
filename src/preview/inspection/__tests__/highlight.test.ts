@@ -5,6 +5,7 @@ import {
   clearAllIframeHighlights,
   clearHighlight,
   HIGHLIGHT_CLASS,
+  HIGHLIGHT_STYLE_ID,
   highlightElement,
   resolveElementReference,
 } from '../highlight';
@@ -115,6 +116,29 @@ describe('highlightElement', () => {
     const ref: ElementReference = { tagName: 'bogus' };
     expect(highlightElement(doc, ref)).toBeNull();
   });
+
+  it('injects the highlight rule into the document (faded highlight would be invisible)', () => {
+    const doc = setupDoc('<p id="a">Hello</p>');
+    const ref: ElementReference = { tagName: 'p', selector: '#a' };
+    highlightElement(doc, ref);
+    const style = doc.getElementById(HIGHLIGHT_STYLE_ID);
+    expect(style).not.toBeNull();
+    expect(style!.tagName).toBe('STYLE');
+    expect(style!.textContent).toContain(`.${HIGHLIGHT_CLASS}`);
+    expect(style!.textContent).toContain('outline: 3px solid #3b82f6');
+  });
+
+  it('is idempotent — repeated highlights do not duplicate the injected rule', () => {
+    const doc = setupDoc('<p id="a">Hello</p><p id="b">World</p>');
+    const refA: ElementReference = { tagName: 'p', selector: '#a' };
+    const refB: ElementReference = { tagName: 'p', selector: '#b' };
+
+    highlightElement(doc, refA);
+    highlightElement(doc, refB);
+    highlightElement(doc, refB);
+
+    expect(doc.querySelectorAll(`#${HIGHLIGHT_STYLE_ID}`)).toHaveLength(1);
+  });
 });
 
 // --- clearHighlight ---
@@ -130,6 +154,19 @@ describe('clearHighlight', () => {
     clearHighlight(document);
     expect(p1.classList.contains(HIGHLIGHT_CLASS)).toBe(false);
     expect(p2.classList.contains(HIGHLIGHT_CLASS)).toBe(false);
+  });
+
+  it('removes the injected highlight rule on clear', () => {
+    document.body.innerHTML = '<p id="a">A</p>';
+    const p1 = document.body.children[0]!;
+    p1.classList.add(HIGHLIGHT_CLASS);
+    const style = document.createElement('style');
+    style.id = HIGHLIGHT_STYLE_ID;
+    document.head?.appendChild(style);
+
+    clearHighlight(document);
+    expect(p1.classList.contains(HIGHLIGHT_CLASS)).toBe(false);
+    expect(document.getElementById(HIGHLIGHT_STYLE_ID)).toBeNull();
   });
 
   it('does nothing for null document', () => {

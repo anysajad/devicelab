@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Off-viewport nested fixture</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      .container {
+        position: absolute;
+        left: -300px;
+        top: 8px;
+        width: 200px;
+        height: 200px;
+      }
+      .child {
+        position: absolute;
+        left: 20px;
+        top: 20px;
+        width: 160px;
+        height: 160px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container" class="container">
+      <div class="child">nested content</div>
+    </div>
+  </body>
+</html>

@@ -9,6 +9,36 @@ import type { ElementReference } from '@/inspection';
 export const HIGHLIGHT_CLASS = 'devicelab-inspect-highlight';
 
 /**
+ * id of the <style> element injected into an inspected document so the
+ * highlight class resolves there. Framed documents do not load the app's
+ * stylesheet, so without this the class has no visible effect (real-browser
+ * finding: outline-style stays 'none').
+ */
+export const HIGHLIGHT_STYLE_ID = 'devicelab-inspect-highlight-style';
+
+/** The exact visual treatment applied to highlighted elements in a frame. */
+const HIGHLIGHT_CSS = `.${HIGHLIGHT_CLASS} { outline: 3px solid #3b82f6 !important; outline-offset: 2px !important; box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2) !important; }`;
+
+/**
+ * Ensure the framed document carries the highlight rule. Idempotent: injects a
+ * single <style> once per document. Uses only paint-only properties (outline /
+ * box-shadow, both !important) so it can never change page layout or geometry.
+ * Best-effort: failure to inject is swallowed (highlight then degrades to the
+ * class-only behavior).
+ */
+function ensureHighlightStyle(document: Document): void {
+  try {
+    if (document.getElementById(HIGHLIGHT_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = HIGHLIGHT_STYLE_ID;
+    style.textContent = HIGHLIGHT_CSS;
+    (document.head ?? document.documentElement).appendChild(style);
+  } catch {
+    // Cross-origin or unavailable document — nothing to do.
+  }
+}
+
+/**
  * Resolve an ElementReference back to a live element within a document.
  *
  * Best-effort only: cross-origin documents, removed elements, and selectors
@@ -57,15 +87,17 @@ export function highlightElement(
   } catch {
     return null;
   }
-  if (el) {
+  if (el && document) {
     clearHighlight(document);
+    ensureHighlightStyle(document);
     el.classList.add(HIGHLIGHT_CLASS);
   }
   return el;
 }
 
 /**
- * Remove all previously applied highlights in a document.
+ * Remove all previously applied highlights in a document, including the
+ * injected highlight rule so repeated inspections leave no trace.
  */
 export function clearHighlight(document: Document | null | undefined): void {
   if (!document) return;
@@ -73,6 +105,8 @@ export function clearHighlight(document: Document | null | undefined): void {
     document
       .querySelectorAll(`.${HIGHLIGHT_CLASS}`)
       .forEach((el) => el.classList.remove(HIGHLIGHT_CLASS));
+    const styleEl = document.getElementById(HIGHLIGHT_STYLE_ID);
+    if (styleEl) styleEl.remove();
   } catch {
     // Cross-origin or invalid — nothing to clear.
   }
