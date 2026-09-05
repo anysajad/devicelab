@@ -506,4 +506,237 @@ describe('usePreviewStore', () => {
       expect(usePreviewStore.getState().inspectionRequest).toBe(1);
     });
   });
+
+  // --- Hydration tests ---
+
+  describe('hydrate', () => {
+    it('sets entries from payload', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: 'https://example.com',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().entries).toHaveLength(1);
+      expect(usePreviewStore.getState().entries[0]!.deviceId).toBe('iphone-15');
+    });
+
+    it('sets sharedUrl', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: 'https://test.com',
+        entries: [],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().sharedUrl).toBe('https://test.com');
+    });
+
+    it('sets layoutMode', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+          { id: 'preview-2', deviceId: 'ipad', orientation: 'portrait' },
+        ],
+        layoutMode: 'compare',
+        compareIds: ['preview-1', 'preview-2'],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().layoutMode).toBe('compare');
+    });
+
+    it('preserves activeId null', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().activeId).toBeNull();
+    });
+
+    it('preserves valid activeId', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: 'preview-1',
+      });
+      expect(usePreviewStore.getState().activeId).toBe('preview-1');
+    });
+
+    it('clears lifecycleStatus', () => {
+      usePreviewStore.getState().addEntry('iphone-15');
+      const id = usePreviewStore.getState().entries[0]!.id;
+      usePreviewStore.getState().updateLifecycleStatus(id, 'ready');
+      expect(usePreviewStore.getState().lifecycleStatus[id]).toBe('ready');
+
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-99', deviceId: 'iphone-15', orientation: 'portrait' },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().lifecycleStatus).toEqual({});
+    });
+
+    it('clears inspectionResults', () => {
+      const id = usePreviewStore.getState().addEntry('iphone-15');
+      usePreviewStore.getState().setInspectionResult(id, {
+        phase: 'ready',
+        inspectedAt: 1000,
+      });
+      expect(usePreviewStore.getState().inspectionResults[id]).toBeDefined();
+
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().inspectionResults).toEqual({});
+    });
+
+    it('clears inspectionActive and inspectionRequest', () => {
+      usePreviewStore.getState().requestInspection();
+      expect(usePreviewStore.getState().inspectionActive).toBe(true);
+      expect(usePreviewStore.getState().inspectionRequest).toBe(1);
+
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().inspectionActive).toBe(false);
+      expect(usePreviewStore.getState().inspectionRequest).toBe(0);
+    });
+
+    it('replaces compareIds', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+          { id: 'preview-2', deviceId: 'ipad', orientation: 'portrait' },
+        ],
+        layoutMode: 'compare',
+        compareIds: ['preview-1', 'preview-2'],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().compareIds).toEqual([
+        'preview-1',
+        'preview-2',
+      ]);
+    });
+
+    it('new addEntry after hydrate never collides with hydrated ids', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+          { id: 'preview-5', deviceId: 'ipad', orientation: 'portrait' },
+          {
+            id: 'preview-3',
+            deviceId: 'iphone-15-pro',
+            orientation: 'portrait',
+          },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+
+      const newId = usePreviewStore.getState().addEntry('iphone-15');
+      expect(newId).not.toBe('preview-1');
+      expect(newId).not.toBe('preview-3');
+      expect(newId).not.toBe('preview-5');
+      expect(newId).toMatch(/^preview-\d+$/);
+    });
+
+    it('hydrated payload entries are mapped to full PreviewEntry shape', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          {
+            id: 'preview-1',
+            deviceId: '__custom__',
+            orientation: 'landscape',
+            viewportMode: 'custom',
+            customViewportWidth: 1024,
+            customViewportHeight: 768,
+          },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+
+      const entry = usePreviewStore.getState().entries[0]!;
+      expect(entry.id).toBe('preview-1');
+      expect(entry.deviceId).toBe('__custom__');
+      expect(entry.orientation).toBe('landscape');
+      expect(entry.viewportMode).toBe('custom');
+      expect(entry.customViewportWidth).toBe(1024);
+      expect(entry.customViewportHeight).toBe(768);
+    });
+
+    it('hydrated entries with customUrl preserve it', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: '',
+        entries: [
+          {
+            id: 'preview-1',
+            deviceId: 'iphone-15',
+            orientation: 'portrait',
+            customUrl: 'https://custom.example',
+          },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().entries[0]!.customUrl).toBe(
+        'https://custom.example'
+      );
+    });
+
+    it('repeated hydrate replaces previous state', () => {
+      usePreviewStore.getState().hydrate({
+        sharedUrl: 'https://first.com',
+        entries: [
+          { id: 'preview-1', deviceId: 'iphone-15', orientation: 'portrait' },
+        ],
+        layoutMode: 'grid',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().entries).toHaveLength(1);
+
+      usePreviewStore.getState().hydrate({
+        sharedUrl: 'https://second.com',
+        entries: [],
+        layoutMode: 'focus',
+        compareIds: [],
+        activeId: null,
+      });
+      expect(usePreviewStore.getState().entries).toHaveLength(0);
+      expect(usePreviewStore.getState().sharedUrl).toBe('https://second.com');
+      expect(usePreviewStore.getState().layoutMode).toBe('focus');
+    });
+  });
 });

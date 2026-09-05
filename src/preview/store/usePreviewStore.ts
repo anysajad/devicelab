@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import type { HydratePayload } from '../../projects/types';
 import type {
   DeviceOrientation,
   LayoutMode,
@@ -7,12 +8,30 @@ import type {
   PreviewInstanceId,
   PreviewInspectionSnapshot,
   PreviewLifecycle,
+  ViewportMode,
 } from '../types';
 
 /** Stable session-local ID generator. */
 let nextId = 1;
 function generateId(): PreviewInstanceId {
   return `preview-${nextId++}`;
+}
+
+/**
+ * Advance the ID generator past any preview-N IDs present in a set of
+ * entry IDs.  Called during hydration so that newly-created entries
+ * never collide with hydrated IDs.
+ */
+function advanceNextIdBeyond(ids: string[]): void {
+  for (const id of ids) {
+    const match = /^preview-(\d+)$/.exec(id);
+    if (match) {
+      const num = parseInt(match[1]!, 10);
+      if (num >= nextId) {
+        nextId = num + 1;
+      }
+    }
+  }
 }
 
 /**
@@ -103,6 +122,9 @@ export interface PreviewCollectionActions {
   requestInspection: () => void;
   /** Reset to clean initial state. */
   reset: () => void;
+
+  /** Hydrate from a validated project payload, replacing persisted fields and resetting runtime state. */
+  hydrate: (payload: HydratePayload) => void;
 
   // --- Comparison actions ---
 
@@ -246,6 +268,39 @@ export const usePreviewStore = create<
 
   reset: () => {
     set(INITIAL_STATE);
+  },
+
+  hydrate: (payload) => {
+    // Advance the ID generator past any hydrated preview-N IDs
+    advanceNextIdBeyond(payload.entries.map((e) => e.id));
+
+    // Replace persisted workspace fields and reset all runtime-only state
+    set({
+      entries: payload.entries.map((e) => ({
+        id: e.id,
+        deviceId: e.deviceId,
+        orientation: e.orientation as DeviceOrientation,
+        ...(e.customUrl !== undefined ? { customUrl: e.customUrl } : {}),
+        ...(e.viewportMode !== undefined
+          ? { viewportMode: e.viewportMode as ViewportMode }
+          : {}),
+        ...(e.customViewportWidth !== undefined
+          ? { customViewportWidth: e.customViewportWidth }
+          : {}),
+        ...(e.customViewportHeight !== undefined
+          ? { customViewportHeight: e.customViewportHeight }
+          : {}),
+      })),
+      sharedUrl: payload.sharedUrl,
+      activeId: payload.activeId,
+      layoutMode: payload.layoutMode as LayoutMode,
+      compareIds: [...payload.compareIds],
+      // Reset all runtime-only state
+      lifecycleStatus: {},
+      inspectionResults: {},
+      inspectionActive: false,
+      inspectionRequest: 0,
+    });
   },
 
   // --- Comparison actions ---
