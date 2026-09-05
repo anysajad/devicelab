@@ -94,8 +94,15 @@ export function PreviewInstance({
 
   const effectiveUrl = entry.customUrl ?? sharedUrl;
 
-  const { state, containerRef, reload, zoomIn, zoomOut, fitToContainer } =
-    usePreview();
+  const {
+    state,
+    controller,
+    containerRef,
+    reload,
+    zoomIn,
+    zoomOut,
+    fitToContainer,
+  } = usePreview();
 
   // Per-instance viewport-tool toggles (local UI state — deliberately not in
   // the Zustand collection store; see viewTools for the separation rationale).
@@ -117,7 +124,11 @@ export function PreviewInstance({
     customHeight: number | undefined;
   } | null>(null);
 
-  const { controller } = usePreview();
+  // Note: a single usePreview() call owns controller + containerRef together.
+  // A previous revision called usePreview() twice, which produced a ghost
+  // controller: the instance that received load() had no bound DOM container,
+  // and the container-bound controller never loaded — so no iframe rendered.
+  // (Found by Playwright E2E validation.)
 
   // Register this instance's controller with the workspace so the diagnostics
   // panel can resolve iframes for highlighting. Fires once per mount; stable
@@ -159,7 +170,17 @@ export function PreviewInstance({
       prev.customWidth !== entry.customViewportWidth ||
       prev.customHeight !== entry.customViewportHeight;
 
-    if (changed) {
+    // Safe against React StrictMode's simulated unmount/remount: the teardown
+    // destroys the controller (config resets to idle), and loadedConfigRef
+    // survives. Without this check the remounted instance would skip load()
+    // and leave an empty frame. Only force a reload when there is a real URL
+    // to load — an empty URL (about:blank) must rely on the changed() dedupe,
+    // otherwise the effect re-fires and re-loads forever. (Found by Playwright
+    // E2E validation.)
+    const needsReload =
+      effectiveUrl !== '' && controller.getState().config.url === '';
+
+    if (changed || needsReload) {
       controller.load({
         url: effectiveUrl,
         device: effectiveDevice,

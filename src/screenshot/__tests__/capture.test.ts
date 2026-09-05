@@ -10,6 +10,8 @@ import type { ImageLike, RendererDependencies } from '../renderer';
 function makeIframe(opts: {
   doc: Document | null;
   getterThrows?: boolean;
+  /** When true, browsing to contentWindow.location.href throws (cross-origin). */
+  windowLocationThrows?: boolean;
 }): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
   Object.defineProperty(iframe, 'contentDocument', {
@@ -20,6 +22,21 @@ function makeIframe(opts: {
       return opts.doc;
     },
   });
+  if (opts.windowLocationThrows) {
+    Object.defineProperty(iframe, 'contentWindow', {
+      get: () => {
+        const win = window;
+        return new Proxy(Object.create(null), {
+          get(_t, prop) {
+            if (prop === 'location') {
+              throw new DOMException('blocked', 'SecurityError');
+            }
+            return (win as unknown as Record<PropertyKey, unknown>)[prop];
+          },
+        }) as Window;
+      },
+    });
+  }
   return iframe;
 }
 
@@ -86,6 +103,20 @@ describe('createScreenshotCapturer', () => {
 
   it('returns cross-origin when contentDocument access throws', async () => {
     const iframe = makeIframe({ doc: null, getterThrows: true });
+    const r = await createScreenshotCapturer().capture(
+      { iframe, deviceName: 'X' },
+      SPEC
+    );
+    expect(r.status).toBe('cross-origin');
+  });
+
+  it('returns cross-origin when contentDocument is null and the frame is cross-origin', async () => {
+    // Real browsers return null (not throw) from contentDocument for
+    // cross-origin frames; the location probe is what detects the origin gap.
+    const iframe = makeIframe({
+      doc: null,
+      windowLocationThrows: true,
+    });
     const r = await createScreenshotCapturer().capture(
       { iframe, deviceName: 'X' },
       SPEC

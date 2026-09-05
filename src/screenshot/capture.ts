@@ -43,6 +43,20 @@ export function createScreenshotCapturer(
       }
 
       if (!doc) {
+        // `contentDocument` returns NULL (rather than throwing) for
+        // cross-origin frames — probing `contentWindow.location.href` throws a
+        // SecurityError only for genuinely cross-origin frames. Without this,
+        // loaded cross-origin previews would be mislabelled as "not ready".
+        // (Found by Playwright E2E validation in real Chromium.)
+        try {
+          const win = iframe.contentWindow;
+          if (win) {
+            const href = win.location.href;
+            void href;
+          }
+        } catch {
+          return { status: 'cross-origin' };
+        }
         return { status: 'not-ready' };
       }
 

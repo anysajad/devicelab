@@ -212,15 +212,21 @@ describe('createPreviewController', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('no-ops after destroy', () => {
+  it('no-ops after destroy until load() revives the controller', () => {
     const controller = createPreviewController();
     controller.destroy();
 
-    // These should not throw
-    controller.load(makeConfig());
+    // Destroyed: these should not throw and leave no live iframe.
     controller.setContainerSize(800, 600);
     controller.reload();
     expect(controller.getIframe()).toBeNull();
+
+    // load() revives a torn-down controller (React StrictMode remounts
+    // unmounted instances in development). (Found by Playwright E2E
+    // validation.)
+    controller.load(makeConfig());
+    expect(controller.getIframe()).not.toBeNull();
+    expect(controller.getState().lifecycle).toBe('loading');
   });
 
   it('reload() re-sets lifecycle to loading', () => {

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Text overflow fixture</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+      }
+      /* Clips the wide content so ONLY the box's own text overflow is flagged
+         (no document-level horizontal overflow, no off-viewport finding). */
+      .clip {
+        width: 200px;
+        overflow: hidden;
+      }
+      .overflow-box {
+        width: 200px;
+        font-family: monospace;
+        font-size: 16px;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="clip">
+      <div class="overflow-box">
+        WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+      </div>
+    </div>
+  </body>
+</html>

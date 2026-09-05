@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" style="overflow-x: auto">
+  <head>
+    <meta charset="utf-8" />
+    <title>Scroll okay fixture</title>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Explicit overflow-x: auto marks horizontal scroll as intentional, so
+         horizontalOverflow downgrades the error one severity level. -->
+    <div style="width: 1200px; height: 40px; background: #e2e8f0">
+      intentionally scrollable
+    </div>
+  </body>
+</html>

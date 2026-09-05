@@ -36,5 +36,11 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Playwright E2E artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Misc
 *.local

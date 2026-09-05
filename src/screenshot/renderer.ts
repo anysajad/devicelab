@@ -70,9 +70,18 @@ export function renderXhtmlToPng(
       return c;
     });
 
-  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-    xhtml
-  )}`;
+  // The snapshot's XHTML root must be embedded inside an SVG <foreignObject>:
+  // browser image decoding requires an <svg> root, and a bare HTML root fails
+  // to decode (yielding render-failed). The image viewport is the capture size.
+  // A leading <!DOCTYPE> from the serialized document breaks SVG parsing when
+  // embedded in a foreignObject — strip it (found by Playwright E2E
+  // validation: real browser image decode rejected the doctype).
+  const cleanXhtml = xhtml.replace(/^<!DOCTYPE[^>]*>/i, '').trim();
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<foreignObject width="100%" height="100%">${cleanXhtml}` +
+    `</foreignObject></svg>`;
+  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
   return new Promise<Blob | null>((resolve) => {
     const img = createImage();

@@ -65,11 +65,15 @@ export function usePreview(
   }, [controller]);
 
   // Attach iframe to container and observe resize.
+  // The iframe only exists after load() creates it, so key the effect on the
+  // iframe instance itself (null before load, a stable DOM node after): the
+  // mount-time run must not skip the append once load() has run.
+  const previewIframe = controller.getIframe();
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const iframe = controller.getIframe();
+    const iframe = previewIframe;
     if (iframe && !container.contains(iframe)) {
       container.appendChild(iframe);
     }
@@ -90,7 +94,7 @@ export function usePreview(
       observerRef.current = null;
       // Don't remove iframe here — controller.destroy() handles it.
     };
-  }, [controller]);
+  }, [controller, previewIframe]);
 
   // Destroy controller on unmount.
   useEffect(() => {

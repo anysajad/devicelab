@@ -112,6 +112,43 @@ describe('renderXhtmlToPng', () => {
     });
     expect(await result).toBeNull();
   });
+
+  it('embeds the XHTML inside an SVG foreignObject wrapper for browser decoding', async () => {
+    let assignedSrc = '';
+    const result = renderXhtmlToPng('<p>x</p>', 393, 852, {
+      createImage: () => {
+        const img: ImageLike = {
+          onload: null,
+          onerror: null,
+          width: 0,
+          height: 0,
+          get src() {
+            return assignedSrc;
+          },
+          set src(v: string) {
+            assignedSrc = v;
+            img.onload?.();
+          },
+        };
+        return img;
+      },
+      createCanvas: () =>
+        makeCanvasLike({
+          withToBlob: true,
+          blob: new Blob(['png'], { type: 'image/png' }),
+        }) as unknown as HTMLCanvasElement,
+    });
+    await result;
+    const decoded = decodeURIComponent(
+      assignedSrc.replace(/^data:image\/svg\+xml;charset=utf-8,/, '')
+    );
+    expect(decoded).toContain(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="393" height="852">'
+    );
+    expect(decoded).toContain(
+      '<foreignObject width="100%" height="100%"><p>x</p></foreignObject></svg>'
+    );
+  });
 });
 
 describe('dataUrlToBlob', () => {

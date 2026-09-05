@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pending fixture</title>
+  </head>
+  <body>
+    <div>pending content</div>
+    <!-- Parser-blocking external script. The e2e test stalls this request so the
+         document stays in readyState "loading", exercised by capture's not-ready
+         path. -->
+    <script src="/fixtures/pending-lock.js"></script>
+  </body>
+</html>

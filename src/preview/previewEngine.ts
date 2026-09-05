@@ -189,7 +189,21 @@ export function createPreviewController(): PreviewController {
   }
 
   function load(config: PreviewConfig): void {
-    if (destroyed) return;
+    if (destroyed) {
+      // React StrictMode double-invokes effects in development: the simulated
+      // unmount destroys this controller, then the remounted instance loads it
+      // again. Reset the teardown state so the controller can start fresh.
+      // IMPORTANT: do NOT clear `listeners` here — the remounted component has
+      // already re-subscribed by the time this re-arm runs (effects fire before
+      // the load() call), and clearing would permanently sever React state
+      // updates (found by Playwright E2E validation: "Loading preview..."
+      // overlay stuck, zoom frozen, screenshots failing).
+      destroyed = false;
+      lifecycle = 'idle';
+      error = null;
+      currentConfig = null;
+      iframe = null;
+    }
 
     const sanitized = sanitizeUrl(config.url);
     const effectiveOrientation = resolveOrientation(

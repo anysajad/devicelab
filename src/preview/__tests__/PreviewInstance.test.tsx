@@ -346,8 +346,9 @@ describe('PreviewInstance', () => {
         onRemove={vi.fn()}
       />
     );
-    // DPR 1 displayed in viewport info
-    expect(screen.getByText('0 × 0 · 1×')).toBeInTheDocument();
+    // DPR 1 displayed in viewport info (the custom viewport drives the loaded
+    // viewport; the stale ghost-controller returned 0 × 0, now fixed).
+    expect(screen.getByText('1024 × 768 · 1×')).toBeInTheDocument();
   });
 
   // --- Viewport tools tests ---

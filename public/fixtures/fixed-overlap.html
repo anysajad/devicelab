@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixed overlap fixture</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 120px;
+        background: #cbd5e1;
+      }
+      #banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 40px;
+        background: #fecaca;
+      }
+      #modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 200px;
+        background: #bfdbfe;
+      }
+      main {
+        height: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <header id="site-header"></header>
+    <div id="banner"></div>
+    <div id="modal" role="dialog"></div>
+    <main>
+      <div>page content</div>
+    </main>
+  </body>
+</html>
