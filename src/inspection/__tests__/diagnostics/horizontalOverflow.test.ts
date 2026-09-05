@@ -122,4 +122,103 @@ describe('horizontalOverflowChecker', () => {
     const diagnostics = horizontalOverflowChecker(context);
     expect(diagnostics).toHaveLength(1);
   });
+
+  it('attributes left-side overflow (RTL) to the source element', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="rtl"><span id="s">محتوى</span></div>',
+      viewport: { width: 375, height: 812 },
+      measurements: [
+        { id: 's', data: { rect: { x: -200, y: 0, width: 100, height: 20 } } },
+      ],
+    });
+    context.measurements.getScrollWidth = () => 500;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.metadata).toMatchObject({ direction: 'left' });
+    expect(diagnostics[0]!.element?.tagName).toBe('span');
+  });
+
+  it('excludes fixed/sticky elements from source attribution', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="fixed" style="position:fixed;width:100px;height:100px">x</div>',
+      viewport: { width: 375, height: 812 },
+      measurements: [
+        {
+          id: 'fixed',
+          data: {
+            rect: { x: 0, y: 0, width: 500, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+      ],
+    });
+    context.measurements.getScrollWidth = () => 500;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    // Fixed overlays do not push the document wider — no source attributed
+    expect(diagnostics[0]!.element).toBeUndefined();
+  });
+
+  it('excludes elements cropped by an overflow:hidden ancestor', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="wrap" style="overflow-x:hidden;width:375px"><span id="inner">x</span></div>',
+      viewport: { width: 375, height: 812 },
+      measurements: [
+        {
+          id: 'inner',
+          data: { rect: { x: 400, y: 0, width: 100, height: 20 } },
+        },
+        {
+          id: 'wrap',
+          data: {
+            rect: { x: 0, y: 0, width: 375, height: 100 },
+            style: { overflowX: 'hidden' },
+          },
+        },
+      ],
+    });
+    context.measurements.getScrollWidth = () => 500;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.element).toBeUndefined();
+  });
+
+  it('downgrades severity when html/body declare horizontal scrolling', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div>x</div>',
+      viewport: { width: 375, height: 812 },
+      measurements: [{ tag: 'body', data: { style: { overflowX: 'auto' } } }],
+    });
+    // 125px over would normally be a warning
+    context.measurements.getScrollWidth = () => 500;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics[0]!.severity).toBe('info');
+    expect(diagnostics[0]!.metadata).toMatchObject({ intentionalScroll: true });
+  });
+
+  it('downgrades error to warning for intentional scrolling', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div>x</div>',
+      viewport: { width: 375, height: 812 },
+      measurements: [{ tag: 'html', data: { style: { overflowX: 'scroll' } } }],
+    });
+    // 400px over would normally be an error
+    context.measurements.getScrollWidth = () => 775;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics[0]!.severity).toBe('warning');
+    expect(diagnostics[0]!.metadata).toMatchObject({ intentionalScroll: true });
+  });
+
+  it('does not downgrade without declarative horizontal scrolling', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div>x</div>',
+      viewport: { width: 375, height: 812 },
+    });
+    context.measurements.getScrollWidth = () => 500;
+    const diagnostics = horizontalOverflowChecker(context);
+    expect(diagnostics[0]!.severity).toBe('warning');
+    expect(diagnostics[0]!.metadata).not.toHaveProperty('intentionalScroll');
+  });
 });

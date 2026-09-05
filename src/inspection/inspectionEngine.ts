@@ -7,7 +7,10 @@ import type {
   ViewportSize,
 } from './types';
 import { DEFAULT_CHECKERS } from './checkers';
-import { DOMMeasurementAdapter } from './measurement';
+import {
+  DOMMeasurementAdapter,
+  createCachedMeasurementAdapter,
+} from './measurement';
 import { getInspectableElements, MAX_ELEMENTS } from './utils';
 
 /** Create an InspectionContext from a Document, viewport, and measurement adapter. */
@@ -17,7 +20,13 @@ export function createInspectionContext(
   measurements: MeasurementAdapter = DOMMeasurementAdapter
 ): InspectionContext {
   const elements = getInspectableElements(document);
-  return { document, viewport, measurements, elements };
+  return {
+    document,
+    viewport,
+    // Memoize per-element measurements — checkers share this adapter.
+    measurements: createCachedMeasurementAdapter(measurements),
+    elements,
+  };
 }
 
 /**

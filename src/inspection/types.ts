@@ -5,7 +5,11 @@ type DiagnosticSeverity = 'info' | 'warning' | 'error';
 // --- Diagnostic types (initial set) ---
 
 type DiagnosticType =
-  'horizontal-overflow' | 'off-viewport' | 'text-overflow' | 'fixed-overlap';
+  | 'horizontal-overflow'
+  | 'off-viewport'
+  | 'text-overflow'
+  | 'fixed-overlap'
+  | 'touch-target';
 
 // --- Element reference (lightweight, serializable, no live DOM ref) ---
 
@@ -29,6 +33,8 @@ interface Diagnostic {
   message: string;
   /** Reference to the offending DOM element, if applicable. */
   element?: ElementReference;
+  /** Reference to a secondary related element, if any (e.g. a collision partner). */
+  relatedElement?: ElementReference;
   /** Type-specific extra data. */
   metadata?: Record<string, unknown>;
 }
@@ -54,6 +60,7 @@ interface ComputedStyleSnapshot {
   readonly zIndex: string;
   readonly width: string;
   readonly height: string;
+  readonly pointerEvents: string;
 }
 
 // --- Measurement adapter (abstracts browser layout for testability) ---

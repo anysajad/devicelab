@@ -27,6 +27,7 @@ const DEFAULT_STYLE: ComputedStyleSnapshot = {
   zIndex: 'auto',
   width: 'auto',
   height: 'auto',
+  pointerEvents: 'auto',
 };
 
 /**

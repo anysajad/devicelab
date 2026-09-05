@@ -304,4 +304,17 @@ describe('robustness', () => {
     const ids = status.diagnostics.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('runs the touch-target checker as part of DEFAULT_CHECKERS', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<button id="btn">Tap</button>',
+      viewport: { width: 375, height: 812 },
+      measurements: [
+        { id: 'btn', data: { rect: { x: 0, y: 0, width: 20, height: 20 } } },
+      ],
+    });
+    const status = expectReady(runInspection(context, DEFAULT_CHECKERS));
+    const types = status.diagnostics.map((d) => d.type);
+    expect(types).toContain('touch-target');
+  });
 });

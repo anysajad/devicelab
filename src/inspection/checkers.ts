@@ -3,6 +3,7 @@ import { horizontalOverflowChecker } from './diagnostics/horizontalOverflow';
 import { offViewportChecker } from './diagnostics/offViewport';
 import { textOverflowChecker } from './diagnostics/textOverflow';
 import { fixedOverlapChecker } from './diagnostics/fixedOverlap';
+import { touchTargetChecker } from './diagnostics/touchTarget';
 
 /**
  * Immutable static checker registry.
@@ -16,4 +17,5 @@ export const DEFAULT_CHECKERS: readonly DiagnosticChecker[] = Object.freeze([
   offViewportChecker,
   textOverflowChecker,
   fixedOverlapChecker,
+  touchTargetChecker,
 ]);

@@ -40,6 +40,7 @@ describe('textOverflowChecker', () => {
             clientWidth: 100,
             scrollHeight: 200,
             clientHeight: 50,
+            style: { height: '50px' },
           },
         },
       ],
@@ -47,6 +48,27 @@ describe('textOverflowChecker', () => {
     const diagnostics = textOverflowChecker(context);
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]!.metadata).toMatchObject({ direction: 'vertical' });
+  });
+
+  it('ignores vertical overflow when height is auto (no clipping possible)', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">lots of text here</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'e',
+          data: {
+            scrollWidth: 100,
+            clientWidth: 100,
+            scrollHeight: 200,
+            clientHeight: 50,
+            style: { height: 'auto' },
+          },
+        },
+      ],
+    });
+    // height:auto means the box grows with content — nothing is clipped
+    expect(textOverflowChecker(context)).toHaveLength(0);
   });
 
   it('detects no overflow normally', () => {
@@ -221,5 +243,80 @@ describe('textOverflowChecker', () => {
     });
     const diagnostics = textOverflowChecker(context);
     expect(diagnostics.length).toBeLessThanOrEqual(15);
+  });
+
+  it('marks horizontal overflow with wrapping whitespace as uncertain', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">text</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'e',
+          data: {
+            scrollWidth: 300,
+            clientWidth: 100,
+            scrollHeight: 40,
+            clientHeight: 40,
+          },
+        },
+      ],
+    });
+    const diagnostics = textOverflowChecker(context);
+    expect(diagnostics[0]!.severity).toBe('warning');
+    expect(diagnostics[0]!.metadata).toMatchObject({
+      direction: 'horizontal',
+      whiteSpace: 'normal',
+      uncertain: true,
+    });
+  });
+
+  it('treats nowrap horizontal overflow as certain truncation', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">text</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'e',
+          data: {
+            scrollWidth: 300,
+            clientWidth: 100,
+            scrollHeight: 40,
+            clientHeight: 40,
+            style: { whiteSpace: 'nowrap' },
+          },
+        },
+      ],
+    });
+    const diagnostics = textOverflowChecker(context);
+    expect(diagnostics[0]!.metadata).toMatchObject({
+      whiteSpace: 'nowrap',
+      uncertain: false,
+    });
+  });
+
+  it('downgrades vertical overflow to info when clipped by overflow-y:hidden', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">text</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'e',
+          data: {
+            scrollWidth: 100,
+            clientWidth: 100,
+            scrollHeight: 200,
+            clientHeight: 50,
+            style: { height: '50px', overflowY: 'hidden' },
+          },
+        },
+      ],
+    });
+    const diagnostics = textOverflowChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.severity).toBe('info');
+    expect(diagnostics[0]!.metadata).toMatchObject({
+      direction: 'vertical',
+      clipped: true,
+    });
   });
 });

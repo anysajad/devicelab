@@ -26,6 +26,16 @@ const CAP = 15;
  * - zero-sized containers
  * - elements with no meaningful direct text
  *
+ * Refinements:
+ * - Vertical overflow is only reported when the container has an explicit
+ *   (non-auto) height; with height:auto the box simply grows and nothing is
+ *   clipped.
+ * - Vertical overflow clipped by overflow-y:hidden/clip is downgraded to
+ *   info (deliberate clipping) instead of a warning.
+ * - Horizontal overflow carries white-space context: with wrapping whitespace
+ *   the "overflow" may resolve by wrapping, so the finding is marked
+ *   uncertain.
+ *
  * Distinguishes child-element overflow from actual text overflow by
  * requiring the element to contain direct text nodes.
  */
@@ -56,8 +66,12 @@ export const textOverflowChecker: DiagnosticChecker = (ctx) => {
       metrics.clientWidth > 0 &&
       metrics.scrollWidth > metrics.clientWidth + TOLERANCE_PX;
 
-    // Check vertical overflow
+    // Vertical overflow only matters when the box has an explicit height —
+    // with height:auto the container grows and nothing is clipped.
+    const hasExplicitHeight =
+      style.height !== 'auto' && style.height !== '' && style.height !== '0px';
     const verticalOverflow =
+      hasExplicitHeight &&
       metrics.clientHeight > 0 &&
       metrics.scrollHeight > metrics.clientHeight + TOLERANCE_PX;
 
@@ -66,6 +80,16 @@ export const textOverflowChecker: DiagnosticChecker = (ctx) => {
     const direction: 'horizontal' | 'vertical' = horizontalOverflow
       ? 'horizontal'
       : 'vertical';
+
+    // white-space: nowrap/pre present the content as a single unbreakable
+    // run; other values allow wrapping, so horizontal overflow is uncertain.
+    const isNowrap =
+      style.whiteSpace === 'nowrap' || style.whiteSpace === 'pre';
+
+    // Vertical overflow clipped by overflow-y:hidden/clip is deliberate.
+    const verticalClipped =
+      verticalOverflow &&
+      (style.overflowY === 'hidden' || style.overflowY === 'clip');
 
     const element = createElementReference(el);
     const metadata: Record<string, unknown> = {
@@ -79,6 +103,9 @@ export const textOverflowChecker: DiagnosticChecker = (ctx) => {
           ? Math.round((metrics.scrollWidth - metrics.clientWidth) * 100) / 100
           : Math.round((metrics.scrollHeight - metrics.clientHeight) * 100) /
             100,
+      whiteSpace: style.whiteSpace,
+      uncertain: direction === 'horizontal' && !isNowrap,
+      clipped: verticalClipped,
     };
 
     const id = generateDiagnosticId('text-overflow', element, metadata);
@@ -88,11 +115,23 @@ export const textOverflowChecker: DiagnosticChecker = (ctx) => {
         ? metrics.scrollWidth - metrics.clientWidth
         : metrics.scrollHeight - metrics.clientHeight;
 
+    const baseMessage = `Text overflows its container ${direction === 'horizontal' ? 'horizontally' : 'vertically'} by ~${Math.round(overflow)}px.`;
+    let message = baseMessage;
+    if (direction === 'horizontal' && !isNowrap) {
+      message = `${baseMessage} Text wraps by default (white-space: ${style.whiteSpace}) — overflow may be reflowed rather than clipped.`;
+    } else if (verticalClipped) {
+      message = `${baseMessage} Content is clipped by the container.`;
+    }
+
+    const severity: Diagnostic['severity'] = verticalClipped
+      ? 'info'
+      : 'warning';
+
     diagnostics.push({
       id,
       type: 'text-overflow',
-      severity: 'warning',
-      message: `Text overflows its container ${direction === 'horizontal' ? 'horizontally' : 'vertically'} by ~${Math.round(overflow)}px.`,
+      severity,
+      message,
       element,
       metadata,
     });

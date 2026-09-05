@@ -2,6 +2,7 @@ import type {
   ComputedStyleSnapshot,
   ElementReference,
   MeasurementAdapter,
+  ViewportSize,
 } from './types';
 
 // --- Tags to skip during DOM traversal ---
@@ -171,6 +172,103 @@ export function rectsOverlap(a: DOMRect, b: DOMRect, minArea = 0): boolean {
   return intersectionArea(a, b) > minArea;
 }
 
+// --- Viewport geometry helpers ---
+
+/** Check if a rect lies entirely outside the viewport (invisible). */
+export function isFullyOutsideViewport(
+  rect: DOMRect,
+  viewport: ViewportSize
+): boolean {
+  return (
+    rect.right <= 0 ||
+    rect.bottom <= 0 ||
+    rect.left >= viewport.width ||
+    rect.top >= viewport.height
+  );
+}
+
+/** Check if a rect extends beyond a viewport edge (partially or fully). */
+export function isPartiallyOutsideViewport(
+  rect: DOMRect,
+  viewport: ViewportSize
+): boolean {
+  return (
+    rect.left < 0 ||
+    rect.top < 0 ||
+    rect.right > viewport.width ||
+    rect.bottom > viewport.height
+  );
+}
+
+/** Check if a rect extends beyond a viewport edge by more than a tolerance. */
+export function isOutsideViewportWithTolerance(
+  rect: DOMRect,
+  viewport: ViewportSize,
+  tolerancePx: number
+): boolean {
+  return (
+    rect.left < -tolerancePx ||
+    rect.top < -tolerancePx ||
+    rect.right > viewport.width + tolerancePx ||
+    rect.bottom > viewport.height + tolerancePx
+  );
+}
+
+/**
+ * Find the nearest ancestor of `el` that is entirely outside the viewport.
+ *
+ * Used to collapse off-viewport diagnostics to the shallowest offending
+ * element. The document root (html/body) is never an "off-screen ancestor":
+ * doc-level scrolling is handled elsewhere and would otherwise swallow every
+ * report.
+ */
+export function findOffViewportAncestor(
+  el: Element,
+  viewport: ViewportSize,
+  m: MeasurementAdapter
+): Element | null {
+  let node = el.parentElement;
+  while (node) {
+    if (node.tagName === 'HTML' || node.tagName === 'BODY') break;
+    if (isFullyOutsideViewport(getElementRect(node, m), viewport)) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Find the nearest ancestor that clips overflow on the given axis
+ * (overflow-x/y: hidden|clip) while remaining within the viewport.
+ *
+ * Elements under such an ancestor extend past their crop box by design, so
+ * they are not the cause of document-level overflow or off-viewport issues.
+ */
+export function findClippingAncestor(
+  el: Element,
+  axis: 'x' | 'y',
+  viewport: ViewportSize,
+  m: MeasurementAdapter
+): Element | null {
+  let node = el.parentElement;
+  while (node) {
+    if (node.tagName === 'HTML' || node.tagName === 'BODY') break;
+    const style = getStyle(node, m);
+    const clips =
+      axis === 'x'
+        ? style.overflowX === 'hidden' || style.overflowX === 'clip'
+        : style.overflowY === 'hidden' || style.overflowY === 'clip';
+    if (clips) {
+      if (!isFullyOutsideViewport(getElementRect(node, m), viewport)) {
+        return node;
+      }
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 // --- Exclusion helpers ---
 
 /** Tags that are non-visual and should be excluded from most checks. */
@@ -234,6 +332,45 @@ export function hasEllipsisTruncation(style: ComputedStyleSnapshot): boolean {
 export function hasTextContent(el: Element): boolean {
   const text = el.textContent ?? '';
   return text.trim().length > 0;
+}
+
+// --- Interactive element helpers ---
+
+/** Selector for elements that accept user interaction or pointer input. */
+export const INTERACTIVE_SELECTOR = [
+  'a[href]',
+  'button',
+  'input:not([type="hidden"])',
+  'select',
+  'textarea',
+  'summary',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="tab"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+/** Check if an element is an interactive user-facing control. */
+export function isInteractiveElement(el: Element): boolean {
+  try {
+    return el.matches(INTERACTIVE_SELECTOR);
+  } catch {
+    return false;
+  }
+}
+
+/** Check if any ancestor of `el` is an interactive element (nested-interactive collapse). */
+export function hasInteractiveAncestor(el: Element): boolean {
+  let node = el.parentElement;
+  while (node) {
+    if (isInteractiveElement(node)) return true;
+    node = node.parentElement;
+  }
+  return false;
 }
 
 // --- Content candidate selectors for fixed/sticky overlap ---

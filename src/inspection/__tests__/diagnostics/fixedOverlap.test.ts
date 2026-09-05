@@ -250,6 +250,163 @@ describe('fixedOverlapChecker', () => {
       measurements,
     });
     const diagnostics = fixedOverlapChecker(context);
-    expect(diagnostics.length).toBe(5);
+    // 5 overlay×content findings + 5 fixed-vs-fixed collisions (10 pairs,
+    // capped at 5) → each of the 5 identical stacked elements collides with
+    // the others in the same region.
+    expect(diagnostics.length).toBe(10);
+  });
+
+  it('excludes overlay/modal/role fixed elements from overlap reporting', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="dialog" role="dialog" style="position:fixed;width:100px;height:100px"></div><main id="content" style="width:200px;height:200px"></main>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'dialog',
+          data: {
+            rect: { x: 0, y: 0, width: 100, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+        {
+          id: 'content',
+          data: {
+            rect: { x: 0, y: 0, width: 200, height: 200 },
+            style: { position: 'static' },
+          },
+        },
+      ],
+    });
+    expect(fixedOverlapChecker(context)).toHaveLength(0);
+  });
+
+  it('excludes aria-modal fixed overlays', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="modal" aria-modal="true" style="position:fixed;width:100px;height:100px"></div><main id="content" style="width:200px;height:200px"></main>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'modal',
+          data: {
+            rect: { x: 0, y: 0, width: 100, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+        {
+          id: 'content',
+          data: {
+            rect: { x: 0, y: 0, width: 200, height: 200 },
+            style: { position: 'static' },
+          },
+        },
+      ],
+    });
+    expect(fixedOverlapChecker(context)).toHaveLength(0);
+  });
+
+  it('reports fixed-vs-fixed collisions with a relatedElement', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="a" style="position:fixed;width:100px;height:100px"></div><div id="b" style="position:fixed;width:100px;height:100px"></div><main id="content" style="width:200px;height:200px"></main>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'a',
+          data: {
+            rect: { x: 0, y: 0, width: 100, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+        {
+          id: 'b',
+          data: {
+            rect: { x: 0, y: 0, width: 100, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+        {
+          id: 'content',
+          data: {
+            rect: { x: 0, y: 0, width: 200, height: 200 },
+            style: { position: 'static' },
+          },
+        },
+      ],
+    });
+    const diagnostics = fixedOverlapChecker(context);
+    // 2 overlay×content + 1 collision
+    expect(diagnostics).toHaveLength(3);
+    const collision = diagnostics.find((d) => d.relatedElement);
+    expect(collision).toBeDefined();
+    expect(collision!.element?.id).toBe('a');
+    expect(collision!.relatedElement?.id).toBe('b');
+    expect(collision!.metadata).toMatchObject({ intersectionArea: 10000 });
+  });
+
+  it('excludes nested fixed pairs from collisions', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="a" style="position:fixed;width:200px;height:200px"><div id="b" style="position:fixed;width:100px;height:100px"></div></div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'a',
+          data: {
+            rect: { x: 0, y: 0, width: 200, height: 200 },
+            style: { position: 'fixed' },
+          },
+        },
+        {
+          id: 'b',
+          data: {
+            rect: { x: 0, y: 0, width: 100, height: 100 },
+            style: { position: 'fixed' },
+          },
+        },
+      ],
+    });
+    expect(fixedOverlapChecker(context)).toHaveLength(0);
+  });
+
+  it('caps fixed-vs-fixed collisions separately from overlay findings', () => {
+    const bodyHtml =
+      Array.from(
+        { length: 6 },
+        (_, i) =>
+          `<div id="o${i}" style="position:fixed;width:100px;height:100px"></div>`
+      ).join('') + '<main id="content"></main>';
+    const measurements: Array<{
+      id: string;
+      data: {
+        rect: { x: number; y: number; width: number; height: number };
+        style: { position: 'fixed' | 'static' };
+      };
+    }> = [
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `o${i}`,
+        data: {
+          rect: { x: 0, y: 0, width: 100, height: 100 },
+          style: { position: 'fixed' as const },
+        },
+      })),
+      {
+        id: 'content',
+        data: {
+          rect: { x: 0, y: 0, width: 200, height: 200 },
+          style: { position: 'static' as const },
+        },
+      },
+    ];
+    const { context } = setupInspectionTest({
+      bodyHtml,
+      viewport: VIEWPORT,
+      measurements,
+    });
+    const diagnostics = fixedOverlapChecker(context);
+    const collisions = diagnostics.filter((d) => d.relatedElement);
+    // 15 possible pairs among 6 elements → capped at 5
+    expect(collisions).toHaveLength(5);
   });
 });

@@ -170,4 +170,84 @@ describe('offViewportChecker', () => {
     expect(diagnostics).toHaveLength(21);
     expect(diagnostics[20]!.metadata).toMatchObject({ suppressed: 10 });
   });
+
+  it('ignores sub-edge violations within the 1px tolerance', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">content</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        // Extends 1px past the right edge (right = 376)
+        { id: 'e', data: { rect: { x: 374, y: 10, width: 2, height: 50 } } },
+      ],
+    });
+    expect(offViewportChecker(context)).toHaveLength(0);
+  });
+
+  it('reports violations beyond the 1px tolerance', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="e">content</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        // Extends 2px past the right edge (right = 377 < 375 + 1)
+        { id: 'e', data: { rect: { x: 374, y: 10, width: 3, height: 50 } } },
+      ],
+    });
+    const diagnostics = offViewportChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.severity).toBe('info');
+  });
+
+  it('excludes elements with aria-hidden or [hidden] attributes', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="ah" aria-hidden="true">x</div><div id="hd" hidden>x</div>',
+      viewport: VIEWPORT,
+      measurements: [
+        { id: 'ah', data: { rect: { x: 600, y: 0, width: 100, height: 50 } } },
+        { id: 'hd', data: { rect: { x: 600, y: 0, width: 100, height: 50 } } },
+      ],
+    });
+    expect(offViewportChecker(context)).toHaveLength(0);
+  });
+
+  it('skips elements clipped by an in-viewport overflow:hidden ancestor', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml:
+        '<div id="wrap" style="overflow-x:hidden"><div id="e">content</div></div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'wrap',
+          data: {
+            rect: { x: 0, y: 0, width: 375, height: 100 },
+            style: { overflowX: 'hidden' },
+          },
+        },
+        { id: 'e', data: { rect: { x: 400, y: 0, width: 100, height: 50 } } },
+      ],
+    });
+    // Fixed: overflow-x:hidden clips the element by design
+    expect(offViewportChecker(context)).toHaveLength(0);
+  });
+
+  it('collapses off-viewport diagnostics to the shallowest ancestor', () => {
+    const { context } = setupInspectionTest({
+      bodyHtml: '<div id="outer"><div id="inner">content</div></div>',
+      viewport: VIEWPORT,
+      measurements: [
+        {
+          id: 'outer',
+          data: { rect: { x: 600, y: 0, width: 100, height: 100 } },
+        },
+        {
+          id: 'inner',
+          data: { rect: { x: 610, y: 10, width: 50, height: 50 } },
+        },
+      ],
+    });
+    const diagnostics = offViewportChecker(context);
+    expect(diagnostics).toHaveLength(1);
+    // Only the shallowest fully-off-screen element is reported
+    expect(diagnostics[0]!.element?.id).toBe('outer');
+  });
 });

@@ -1,8 +1,17 @@
 import { useCallback } from 'react';
 
-import type { Diagnostic, DiagnosticSeverity } from '@/inspection';
+import type {
+  Diagnostic,
+  DiagnosticSeverity,
+  ElementReference,
+} from '@/inspection';
 import type { PreviewController } from '../types';
-import { clearHighlight, highlightElement } from '../inspection/highlight';
+import {
+  clearHighlight,
+  highlightElement,
+  HIGHLIGHT_CLASS,
+  resolveElementReference,
+} from '../inspection/highlight';
 
 const SEVERITY_STYLES: Record<
   DiagnosticSeverity,
@@ -30,6 +39,7 @@ const TYPE_LABELS: Record<string, string> = {
   'off-viewport': 'Off-viewport',
   'text-overflow': 'Text overflow',
   'fixed-overlap': 'Fixed/sticky overlap',
+  'touch-target': 'Touch target',
 };
 
 function severityIcon(severity: DiagnosticSeverity) {
@@ -66,13 +76,12 @@ function severityIcon(severity: DiagnosticSeverity) {
   );
 }
 
-function sourceLabel(diag: Diagnostic): string {
-  if (!diag.element) return '';
+function sourceLabel(ref: ElementReference): string {
   const parts: string[] = [];
-  if (diag.element.tagName) parts.push(diag.element.tagName.toLowerCase());
-  if (diag.element.id) parts.push(`#${diag.element.id}`);
-  if (diag.element.className) {
-    const cls = diag.element.className
+  if (ref.tagName) parts.push(ref.tagName.toLowerCase());
+  if (ref.id) parts.push(`#${ref.id}`);
+  if (ref.className) {
+    const cls = ref.className
       .split(/\s+/)
       .slice(0, 2)
       .filter(Boolean)
@@ -100,26 +109,35 @@ export function DiagnosticItem({
 }: DiagnosticItemProps) {
   const isHighlighted = highlightedId === diagnostic.id;
   const style = SEVERITY_STYLES[diagnostic.severity];
-  const source = sourceLabel(diagnostic);
+  const source = diagnostic.element ? sourceLabel(diagnostic.element) : '';
+  const relatedSource = diagnostic.relatedElement
+    ? sourceLabel(diagnostic.relatedElement)
+    : '';
 
   const handleHighlight = useCallback(() => {
     if (!controller) return;
+    const iframe = controller.getIframe();
+    const doc = iframe?.contentDocument ?? null;
     if (isHighlighted) {
       // Clear this specific highlight
-      const iframe = controller.getIframe();
-      if (iframe?.contentDocument) {
-        clearHighlight(iframe.contentDocument);
-      }
+      clearHighlight(doc);
       onToggleHighlight('');
     } else {
-      const iframe = controller.getIframe();
-      highlightElement(iframe?.contentDocument ?? null, diagnostic.element);
+      highlightElement(doc, diagnostic.element);
+      // Dual highlight: also mark the related element (e.g. collision partner).
+      try {
+        const related = resolveElementReference(doc, diagnostic.relatedElement);
+        related?.classList.add(HIGHLIGHT_CLASS);
+      } catch {
+        // Cross-origin or invalid ref — best-effort only.
+      }
       onToggleHighlight(diagnostic.id);
     }
   }, [
     controller,
     diagnostic.id,
     diagnostic.element,
+    diagnostic.relatedElement,
     isHighlighted,
     onToggleHighlight,
   ]);
@@ -144,6 +162,11 @@ export function DiagnosticItem({
           {source && (
             <code className="truncate text-[11px] text-gray-500 dark:text-gray-400">
               {source}
+            </code>
+          )}
+          {relatedSource && (
+            <code className="shrink-0 truncate text-[11px] text-gray-400 dark:text-gray-500">
+              + {relatedSource}
             </code>
           )}
         </div>
