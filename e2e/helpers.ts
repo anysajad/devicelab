@@ -366,6 +366,89 @@ export async function zoomToManual(
   await expect(label).toHaveText(`${targetPercent}%`);
 }
 
+/**
+ * The preview card that owns the given instance's toolbar. Grid/compare/focus
+ * cards all share the `rounded-xl` card wrapper; `nth(index)` keeps the card
+ * matched to the same instance ordering as previewControls(index).
+ */
+export function previewCard(page: Page, index = 0): Locator {
+  return page
+    .locator('div.rounded-xl')
+    .filter({ has: previewControls(page, index) });
+}
+
+/**
+ * The single scaled frame container inside a preview card. It is sized to the
+ * device viewport (CSS pixels) and carries the engine's ONLY zoom transform
+ * (`transform: scale(effectiveZoom)`), so its bounding box is the visual
+ * footprint and the iframe's CSS viewport stays W×H.
+ */
+export function frameContainer(card: Locator): Locator {
+  return card.locator('div.relative.overflow-hidden.rounded-2xl');
+}
+
+/** Parsed zoom percentage shown in an instance's toolbar (e.g. 110 for 110%). */
+export async function zoomLabelValue(page: Page, index = 0): Promise<number> {
+  const label = previewControls(page, index)
+    .getByText(/^\d+%$/)
+    .first();
+  await expect(label).toBeVisible();
+  return parseInt((await label.textContent()) ?? '100', 10);
+}
+
+/**
+ * Commit custom viewport dimensions on an instance. Enter triggers the
+ * atomic commit; invalid input must be rejected, preserving the last valid
+ * stored dimensions.
+ */
+export async function customViewportCommit(
+  page: Page,
+  index: number,
+  width: string,
+  height: string
+): Promise<void> {
+  const controls = previewControls(page, index);
+  await controls.getByLabel('Custom viewport width').fill(width);
+  await controls.getByLabel('Custom viewport height').fill(height);
+  await controls.getByLabel('Custom viewport height').press('Enter');
+}
+
+/** Switch an instance to the Custom viewport synthetic device. */
+export async function selectCustomViewport(
+  page: Page,
+  index = 0
+): Promise<void> {
+  await previewControls(page, index)
+    .getByLabel('Select device')
+    .selectOption('__custom__');
+}
+
+/** Switch an instance to a preset device by its registry id. */
+export async function selectPresetDeviceById(
+  page: Page,
+  index: number,
+  deviceId: string
+): Promise<void> {
+  await previewControls(page, index)
+    .getByLabel('Select device')
+    .selectOption(deviceId);
+}
+
+/** Toggle an instance's orientation via the P/L buttons and onLoad wait. */
+export async function clickOrientation(
+  page: Page,
+  orientation: 'portrait' | 'landscape',
+  index = 0
+): Promise<void> {
+  const label =
+    orientation === 'portrait'
+      ? 'Portrait orientation'
+      : 'Landscape orientation';
+  await previewControls(page, index)
+    .getByRole('button', { name: label, exact: true })
+    .click();
+}
+
 /** Turn on the workspace Inspect toggle and ensure the panel is visible. */
 export async function startInspection(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Inspect', exact: true }).click();
