@@ -167,3 +167,40 @@ export function pngDimensions(buffer: Buffer): {
     height: buffer.readUInt32BE(20),
   };
 }
+
+export interface DecodedPng {
+  width: number;
+  height: number;
+  /** RGBA pixel data, length = width * height * 4. */
+  rgba: Buffer;
+}
+
+/**
+ * Decode a PNG buffer in the page using Chromium's built-in decoder
+ * (createImageBitmap -> canvas -> getImageData) so tests can assert on actual
+ * pixels with zero new dependencies. Deterministic for solid-color fixtures.
+ */
+export async function decodePng(
+  page: Page,
+  buffer: Buffer
+): Promise<DecodedPng> {
+  const result = await page.evaluate(async (bytes: Uint8Array) => {
+    const blob = new Blob([bytes as BlobPart], { type: 'image/png' });
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('canvas 2d context unavailable');
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    return { width: bitmap.width, height: bitmap.height, rgba: data };
+  }, new Uint8Array(buffer));
+  return {
+    width: result.width,
+    height: result.height,
+    rgba: Buffer.from(result.rgba),
+  };
+}

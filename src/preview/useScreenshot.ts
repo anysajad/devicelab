@@ -63,6 +63,18 @@ export function useScreenshot(
     try {
       const state = controller.getState();
       const iframe = controller.getIframe();
+
+      // Honest guard: a failed/error preview must never be captured. In
+      // Chromium the error-state document is not reliably distinguishable from
+      // a valid one through the sandboxed frame, so guard at the integration
+      // layer — surface the unsupported status instead of risking a fabricated
+      // screenshot. (Found while validating the honest contract in real
+      // Chromium.)
+      if (state.lifecycle === 'error') {
+        setStatus('not-ready');
+        return;
+      }
+
       const spec = {
         width: state.viewport.width,
         height: state.viewport.height,

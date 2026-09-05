@@ -19,12 +19,14 @@ function makeController(overrides?: {
   deviceName?: string;
   width?: number;
   height?: number;
+  lifecycle?: PreviewState['lifecycle'];
 }): PreviewController {
   const {
     iframe = document.createElement('iframe'),
     deviceName = 'iPhone 15',
     width = 393,
     height = 852,
+    lifecycle = 'ready',
   } = overrides ?? {};
   return {
     getState: () =>
@@ -36,7 +38,7 @@ function makeController(overrides?: {
         manualZoom: 1,
         effectiveZoom: 1,
         safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
-        lifecycle: 'ready',
+        lifecycle,
         error: null,
       }) as PreviewState,
     getIframe: () => iframe,
@@ -199,6 +201,25 @@ describe('useScreenshot', () => {
 
     unmount();
     expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  it('refuses to capture a failed (error) preview and never fabricates a PNG', async () => {
+    mock.capturer.capture.mockResolvedValue(okResult());
+    const controller = makeController({
+      lifecycle: 'error',
+      iframe: document.createElement('iframe'),
+    });
+    const { result } = renderHook(() => useScreenshot(controller));
+
+    await act(async () => {
+      await result.current.capture();
+    });
+
+    // The capturer must never run against an empty/failed document.
+    expect(mock.capturer.capture).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('not-ready');
+    expect(clickSpy).not.toHaveBeenCalled();
+    expect(result.current.isBusy).toBe(false);
   });
 
   it('never mutates the controller', async () => {
