@@ -28,7 +28,11 @@ interface PreviewFrameProps {
  * Architecture:
  * - The container (ref) is sized to the device viewport dimensions so the
  *   Preview Engine's ResizeObserver receives stable measurements.
- * - The engine applies `transform: scale(effectiveZoom)` on the iframe.
+ * - This container is the SINGLE visual scaling authority: it applies
+ *   `transform: scale(effectiveZoom)`. The iframe itself is never scaled
+ *   (the engine writes no transform to it), so the iframe's CSS-pixel
+ *   viewport stays W×H while the visual footprint scales linearly with
+ *   effectiveZoom.
  * - A visual wrapper is sized to the scaled footprint (viewport × effectiveZoom)
  *   so the parent flex centering and scroll behavior work correctly.
  * - Grid + safe-area overlays are children of the scaled container, so they
@@ -97,7 +101,9 @@ export function PreviewFrame({
                 'inset 0 0 0 3px #1f2937', // dark inner border (bezel)
                 '0 4px 24px rgba(0, 0, 0, 0.25)', // drop shadow
               ].join(', '),
-              // Engine-owned transform. No second scaling system is introduced.
+              // Engine-owned transform — the SINGLE scaling authority. The
+              // iframe is a descendant of this container and is NOT scaled
+              // itself, so this is the only zoom transform in the system.
               transform: `scale(${effectiveZoom})`,
               transformOrigin: 'top left',
             }}

@@ -271,14 +271,18 @@ describe('createPreviewController', () => {
     controller.destroy();
   });
 
-  it('applies transform:scale for zoom', () => {
+  it('setContainerSize() updates fit zoom without scaling the iframe', () => {
     const controller = createPreviewController();
     controller.load(makeConfig());
 
     controller.setContainerSize(200, 200);
+    const state = controller.getState();
     const iframe = controller.getIframe()!;
-    expect(iframe.style.transform).toMatch(/^scale\(/);
-    expect(iframe.style.transformOrigin).toBe('top left');
+    expect(state.effectiveZoom).toBeGreaterThan(0);
+    expect(state.effectiveZoom).toBeLessThanOrEqual(1);
+    // Zoom is rendered once on the frame's scaling container — the engine
+    // must never write a transform to the iframe (single-scale contract).
+    expect(iframe.style.transform).toBe('');
 
     controller.destroy();
   });
@@ -459,13 +463,18 @@ describe('createPreviewController', () => {
     controller.destroy();
   });
 
-  it('iframe transform uses effectiveZoom', () => {
+  it('zoom changes effectiveZoom without scaling the iframe', () => {
     const controller = createPreviewController();
     controller.load(makeConfig());
 
     controller.setZoom(0.75);
+    const state = controller.getState();
     const iframe = controller.getIframe()!;
-    expect(iframe.style.transform).toBe('scale(0.75)');
+    expect(state.effectiveZoom).toBe(0.75);
+    // Single-scale contract: no transform on the iframe; the frame renders
+    // effectiveZoom once on its scaling container.
+    expect(iframe.style.transform).toBe('');
+    expect(iframe.style.transformOrigin).toBe('');
 
     controller.destroy();
   });

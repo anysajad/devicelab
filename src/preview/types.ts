@@ -36,7 +36,7 @@ export interface PreviewState {
   readonly zoomMode: ZoomMode;
   /** User-specified zoom level (only meaningful when zoomMode is 'manual'). */
   readonly manualZoom: number;
-  /** The zoom value actually applied to the iframe transform. */
+  /** The zoom value rendered by the frame's single scaling container. */
   readonly effectiveZoom: number;
   readonly safeArea: SafeAreaInsets;
   readonly lifecycle: PreviewLifecycle;

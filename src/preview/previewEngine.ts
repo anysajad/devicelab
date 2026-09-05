@@ -8,10 +8,8 @@ import type {
 } from './types';
 import {
   clampZoom,
-  computeEffectiveZoom,
   computePreviewState,
   computeViewport,
-  computeZoom,
   resolveOrientation,
   sanitizeUrl,
   ZOOM_STEP,
@@ -27,9 +25,11 @@ const DEFAULT_CONTAINER = { width: 800, height: 600 };
  * and computes all derived state (viewport, zoom, safe-area) from the
  * active PreviewConfig and the host container dimensions.
  *
- * The controller is the single authority for all zoom/scaling. It manages
- * both auto-fit zoom and manual zoom. The iframe's CSS viewport dimensions
- * are never changed by zoom — only the visual `transform: scale()` is affected.
+ * The controller is the single authority for the zoom VALUE. It computes both
+ * auto-fit zoom and manual zoom and exposes the resulting effectiveZoom in
+ * state. The iframe's CSS viewport dimensions are never changed by zoom, and
+ * the controller never writes a CSS transform to the iframe — the frame
+ * component renders the zoom exactly once on its (single) scaling container.
  */
 export function createPreviewController(): PreviewController {
   let iframe: HTMLIFrameElement | null = null;
@@ -59,17 +59,6 @@ export function createPreviewController(): PreviewController {
     for (const listener of listeners) {
       listener(state);
     }
-  }
-
-  function getEffectiveZoom(): number {
-    if (!currentConfig) return 1;
-    const orientation = resolveOrientation(
-      currentConfig.device,
-      currentConfig.orientation
-    );
-    const viewport = computeViewport(currentConfig.device, orientation);
-    const autoFitZoom = computeZoom(viewport, containerWidth, containerHeight);
-    return computeEffectiveZoom(zoomMode, autoFitZoom, manualZoom);
   }
 
   function snapshot(): PreviewState {
@@ -112,20 +101,10 @@ export function createPreviewController(): PreviewController {
     const viewport = computeViewport(currentConfig.device, orientation);
 
     // The iframe's CSS dimensions are the device viewport (unscaled).
-    // These NEVER change with zoom — only the visual transform is affected.
+    // These NEVER change with zoom — the frame's single scaling container
+    // handles visual zoom without touching the iframe's CSS viewport.
     iframe.style.width = `${viewport.width}px`;
     iframe.style.height = `${viewport.height}px`;
-  }
-
-  function updateIframeTransform(): void {
-    if (!iframe || !currentConfig) return;
-
-    const effectiveZoom = getEffectiveZoom();
-
-    // Host-side visual scaling. The iframe content always sees its correct
-    // CSS pixel dimensions; transform: scale only affects visual presentation.
-    iframe.style.transform = `scale(${effectiveZoom})`;
-    iframe.style.transformOrigin = 'top left';
   }
 
   function handleLoad(): void {
@@ -225,7 +204,6 @@ export function createPreviewController(): PreviewController {
     emit();
 
     updateIframeDimensions();
-    updateIframeTransform();
 
     // Setting src triggers the load lifecycle.
     iframe.src = sanitized;
@@ -235,7 +213,8 @@ export function createPreviewController(): PreviewController {
     if (destroyed) return;
     containerWidth = width;
     containerHeight = height;
-    updateIframeTransform();
+    // emit() re-renders the frame, which applies the (possibly re-computed
+    // fit) effectiveZoom to the frame's single scaling container.
     emit();
   }
 
@@ -285,7 +264,6 @@ export function createPreviewController(): PreviewController {
     if (destroyed) return;
     zoomMode = 'manual';
     manualZoom = clampZoom(zoom);
-    updateIframeTransform();
     emit();
   }
 
@@ -293,7 +271,6 @@ export function createPreviewController(): PreviewController {
     if (destroyed) return;
     zoomMode = 'manual';
     manualZoom = clampZoom(manualZoom + ZOOM_STEP);
-    updateIframeTransform();
     emit();
   }
 
@@ -301,14 +278,12 @@ export function createPreviewController(): PreviewController {
     if (destroyed) return;
     zoomMode = 'manual';
     manualZoom = clampZoom(manualZoom - ZOOM_STEP);
-    updateIframeTransform();
     emit();
   }
 
   function setZoomMode(mode: ZoomMode): void {
     if (destroyed) return;
     zoomMode = mode;
-    updateIframeTransform();
     emit();
   }
 
