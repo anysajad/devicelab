@@ -1,6 +1,6 @@
 # Local Companion
 
-**Status:** Phase 2A foundation (no UI integration yet)
+**Status:** Phase 2B-1 (BrowserPreviewBackend control plane)
 
 ## Why the companion exists
 
@@ -11,7 +11,7 @@ DeviceLab's current iframe-based preview cannot render sites that refuse to be e
 ```
 ┌─────────────────────────┐     WebSocket (JSON RPC)     ┌──────────────────────────┐
 │   DeviceLab Web UI      │ ◄─────────────────────────► │   Companion Process      │
-│   (future integration)  │     ws://127.0.0.1:PORT      │   (Node.js + Playwright) │
+│   (BrowserPreviewBackend)│     ws://127.0.0.1:PORT      │   (Node.js + Playwright) │
 └─────────────────────────┘                              └────────────┬─────────────┘
                                                                      │
                                                             Playwright API
@@ -142,16 +142,74 @@ npm run companion:test
 
 ## How this connects to PreviewBackend
 
-The companion will eventually be used by a `BrowserPreviewBackend` that:
+The companion is used by `BrowserPreviewBackend` which:
 
 1. Connects to the companion via WebSocket
 2. Creates a session with the requested viewport
 3. Loads the target URL
-4. Receives screenshot frames
-5. Renders frames on a canvas surface
-6. Forwards user interactions to the companion
+4. Reports state changes back to the preview layer
 
-This integration is explicitly out of scope for Phase 2A.
+## Phase 2B-1: BrowserPreviewBackend Control Plane
+
+Phase 2B-1 establishes the control plane for browser-backed previews:
+
+### BrowserPreviewBackend
+
+- Implements the existing `PreviewBackend` contract
+- Communicates with the companion via WebSocket
+- Manages session lifecycle
+- Maps companion states to preview lifecycle states
+- Provides zoom/viewport control
+- Reports state changes to UI
+
+### WebSocket Client
+
+- Handles connection management
+- Performs protocol hello handshake
+- Authenticates with token
+- Correlates requests/responses
+- Handles concurrent requests
+- Subscribes to events
+
+### Lifecycle Mapping
+
+| Companion State | Preview State |
+| --- | --- |
+| idle | idle |
+| starting | loading |
+| ready | ready |
+| loading | loading |
+| error | error |
+| closed | error |
+
+### Current Capabilities
+
+- ✅ Session lifecycle management
+- ✅ URL navigation
+- ✅ Viewport configuration
+- ✅ State reporting
+- ✅ Zoom control
+- ✅ Error handling
+
+### Intentionally NOT Implemented Yet
+
+- ❌ Screenshot frame delivery (Phase 2B-2)
+- ❌ Canvas rendering (Phase 2B-2)
+- ❌ Mouse/keyboard input (Phase 2B-3)
+- ❌ DPR emulation
+- ❌ Authentication profiles/storageState
+- ❌ Multi-preview optimization
+
+### Why Screenshot Delivery is Deferred
+
+Phase 2B-1 focuses on proving the control plane works end-to-end. Screenshot delivery requires:
+
+1. Canvas element for rendering
+2. Frame capture in companion
+3. Base64 encoding and transmission
+4. Image decoding and canvas drawing
+
+These will be implemented in Phase 2B-2 after the control plane is validated.
 
 ## Protocol example
 
