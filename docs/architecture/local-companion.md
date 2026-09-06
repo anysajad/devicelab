@@ -260,6 +260,36 @@ Phase 2B-2 adds real visual frame delivery:
 - ✅ Stale session frame rejection
 - ✅ Clean destroy/cleanup
 
+### Production Measurements (Phase 2B-2.1 Validation)
+
+Actual measurements from the production implementation:
+
+| Metric | Value |
+| --- | --- |
+| FPS | 10.0 |
+| Average frame size | 9.3 KB |
+| Frames per second | ~10 |
+| Bandwidth per preview | ~93 KB/s |
+
+### Viewport Validation
+
+All viewport configurations tested and verified:
+
+| Viewport | Status |
+| --- | --- |
+| 375×667 (phone portrait) | ✅ |
+| 667×375 (phone landscape) | ✅ |
+| 1280×720 (desktop) | ✅ |
+| 1024×768 (custom) | ✅ |
+
+### Multi-Preview Validation
+
+Two simultaneous browser sessions tested:
+- Independent session IDs
+- Independent frame streams
+- Frames never cross between previews
+- Destroying one session doesn't affect the other
+
 ### Intentionally NOT Implemented Yet
 
 - ❌ Mouse/keyboard input (Phase 2B-3)
