@@ -44,6 +44,70 @@ function generateId(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Record validation pipeline (reused by repository and import)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a raw record through the full migration + validation pipeline.
+ *
+ * Handles: migration, timestamp validation, data validation, name normalization.
+ * Returns a fully validated ProjectRecord or a rejection reason.
+ *
+ * This is the single source of truth for record validation, used by both
+ * the repository read path and the import parser.
+ */
+export function parseAndValidateRecord(
+  raw: Record<string, unknown>
+): Result<ProjectRecord> {
+  // Migration check
+  const migrated = migrateRecord(raw);
+  if (migrated === null) {
+    return {
+      ok: false,
+      reason: 'unsupported-schema-version or corrupted record',
+    };
+  }
+
+  // Validate meta timestamps (must be valid ISO date strings)
+  const { createdAt, updatedAt } = migrated.meta;
+  if (
+    typeof createdAt !== 'string' ||
+    createdAt.trim() === '' ||
+    !Number.isFinite(Date.parse(createdAt))
+  ) {
+    return { ok: false, reason: 'meta.createdAt: missing or invalid date' };
+  }
+  if (
+    typeof updatedAt !== 'string' ||
+    updatedAt.trim() === '' ||
+    !Number.isFinite(Date.parse(updatedAt))
+  ) {
+    return { ok: false, reason: 'meta.updatedAt: missing or invalid date' };
+  }
+
+  // Validate the data portion
+  const dataResult = validateProjectData(migrated.data);
+  if (!dataResult.ok) {
+    return { ok: false, reason: `data validation: ${dataResult.reason}` };
+  }
+
+  // Reconstruct the record with validated data and normalized name
+  const normalizedName = normalizeName(migrated.meta.name);
+  const record: ProjectRecord = {
+    schemaVersion: migrated.schemaVersion,
+    id: migrated.id,
+    meta: {
+      name: normalizedName,
+      createdAt,
+      updatedAt,
+    },
+    data: dataResult.value,
+  };
+
+  return { ok: true, value: record };
+}
+
+// ---------------------------------------------------------------------------
 // ProjectRepository
 // ---------------------------------------------------------------------------
 
@@ -92,52 +156,7 @@ export function createProjectRepository(
       return { ok: false, reason: 'not-found' };
     }
 
-    // Migration check
-    const migrated = migrateRecord(raw);
-    if (migrated === null) {
-      return {
-        ok: false,
-        reason: 'unsupported-schema-version or corrupted record',
-      };
-    }
-
-    // Validate meta timestamps (must be valid ISO date strings)
-    const { createdAt, updatedAt } = migrated.meta;
-    if (
-      typeof createdAt !== 'string' ||
-      createdAt.trim() === '' ||
-      !Number.isFinite(Date.parse(createdAt))
-    ) {
-      return { ok: false, reason: 'meta.createdAt: missing or invalid date' };
-    }
-    if (
-      typeof updatedAt !== 'string' ||
-      updatedAt.trim() === '' ||
-      !Number.isFinite(Date.parse(updatedAt))
-    ) {
-      return { ok: false, reason: 'meta.updatedAt: missing or invalid date' };
-    }
-
-    // Validate the data portion
-    const dataResult = validateProjectData(migrated.data);
-    if (!dataResult.ok) {
-      return { ok: false, reason: `data validation: ${dataResult.reason}` };
-    }
-
-    // Reconstruct the record with validated data and normalized name
-    const normalizedName = normalizeName(migrated.meta.name);
-    const record: ProjectRecord = {
-      schemaVersion: migrated.schemaVersion,
-      id: migrated.id,
-      meta: {
-        name: normalizedName,
-        createdAt,
-        updatedAt,
-      },
-      data: dataResult.value,
-    };
-
-    return { ok: true, value: record };
+    return parseAndValidateRecord(raw);
   }
 
   return {

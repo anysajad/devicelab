@@ -175,8 +175,18 @@ test.describe('diagnostic validation in a real browser', () => {
     const banner = await readElementGeometry(page, '#banner');
     const modal = await readElementGeometry(page, '#modal');
     const main = await readElementGeometry(page, 'main');
-    expect(header.rect).toMatchObject({ left: 0, top: 0, width: 375, height: 120 });
-    expect(banner.rect).toMatchObject({ left: 0, top: 0, width: 375, height: 40 });
+    expect(header.rect).toMatchObject({
+      left: 0,
+      top: 0,
+      width: 375,
+      height: 120,
+    });
+    expect(banner.rect).toMatchObject({
+      left: 0,
+      top: 0,
+      width: 375,
+      height: 40,
+    });
     expect(main.rect.height).toBe(300);
 
     const headerBanner = Math.round(intersectionArea(header.rect, banner.rect));
@@ -187,10 +197,14 @@ test.describe('diagnostic validation in a real browser', () => {
       items.filter({ hasText: 'overlaps meaningful page content with' })
     ).toHaveCount(2);
     await expect(
-      items.filter({ hasText: `overlaps meaningful page content with ${headerMain}px²` })
+      items.filter({
+        hasText: `overlaps meaningful page content with ${headerMain}px²`,
+      })
     ).toHaveCount(1);
     await expect(
-      items.filter({ hasText: `overlaps meaningful page content with ${bannerMain}px²` })
+      items.filter({
+        hasText: `overlaps meaningful page content with ${bannerMain}px²`,
+      })
     ).toHaveCount(1);
 
     const collision = items.filter({
@@ -258,7 +272,9 @@ test.describe('diagnostic validation in a real browser', () => {
     await expect(items.filter({ hasText: '#hidden' })).toHaveCount(0);
   });
 
-  test('rescan clears stale results after the URL changes', async ({ page }) => {
+  test('rescan clears stale results after the URL changes', async ({
+    page,
+  }) => {
     await gotoApp(page);
     await setSharedUrl(page, fixtureUrl('overflow'));
     await addDevice(page, 'iPhone SE');
@@ -287,7 +303,10 @@ test.describe('diagnostic validation in a real browser', () => {
     const items = diagnosticItems(page, 'iPhone SE');
     await expect(items).toHaveCount(2);
 
-    const snapshots: Array<{ corpus: Awaited<ReturnType<typeof diagnosticCorpus>>; rect: ElementGeometry['rect'] }> = [];
+    const snapshots: Array<{
+      corpus: Awaited<ReturnType<typeof diagnosticCorpus>>;
+      rect: ElementGeometry['rect'];
+    }> = [];
     for (const zoom of [100, 90, 200]) {
       await zoomToManual(page, zoom);
       await expect(items).toHaveCount(2);
@@ -385,19 +404,32 @@ test.describe('diagnostic validation in a real browser', () => {
     const clean = await frameFingerprint(page);
 
     // Single highlight on the first item.
-    await items.first().getByRole('button', { name: 'Highlight element in preview' }).click();
-    let state = await frameHighlightState(page, ['#site-header', '#banner', '#modal']);
+    await items
+      .first()
+      .getByRole('button', { name: 'Highlight element in preview' })
+      .click();
+    let state = await frameHighlightState(page, [
+      '#site-header',
+      '#banner',
+      '#modal',
+    ]);
     // Regression: the class was applied but no CSS rule existed in the framed
     // document, so the highlight computed to outline:none — invisible. The
     // injected rule must make it a solid visible outline.
-    expect(state['#site-header']).toMatchObject({ hasClass: true, outlineStyle: 'solid' });
+    expect(state['#site-header']).toMatchObject({
+      hasClass: true,
+      outlineStyle: 'solid',
+    });
     expect(state['#banner']).toMatchObject({ hasClass: false });
     expect(state['#modal']).toMatchObject({ hasClass: false });
     expect(await frameHasHighlightStyle(page)).toBe(true);
     expect(await frameFingerprint(page)).not.toEqual(clean);
 
     // Toggle off: the class, the injected rule, and everything else vanish.
-    await items.first().getByRole('button', { name: 'Remove highlight' }).click();
+    await items
+      .first()
+      .getByRole('button', { name: 'Remove highlight' })
+      .click();
     state = await frameHighlightState(page, ['#site-header']);
     expect(state['#site-header']).toMatchObject({ hasClass: false });
     expect(await frameHasHighlightStyle(page)).toBe(false);
@@ -408,13 +440,29 @@ test.describe('diagnostic validation in a real browser', () => {
     const collision = items.filter({
       hasText: 'overlaps fixed element in the same region',
     });
-    await collision.first().getByRole('button', { name: 'Highlight element in preview' }).click();
-    state = await frameHighlightState(page, ['#site-header', '#banner', '#modal']);
-    expect(state['#site-header']).toMatchObject({ hasClass: true, outlineStyle: 'solid' });
-    expect(state['#banner']).toMatchObject({ hasClass: true, outlineStyle: 'solid' });
+    await collision
+      .first()
+      .getByRole('button', { name: 'Highlight element in preview' })
+      .click();
+    state = await frameHighlightState(page, [
+      '#site-header',
+      '#banner',
+      '#modal',
+    ]);
+    expect(state['#site-header']).toMatchObject({
+      hasClass: true,
+      outlineStyle: 'solid',
+    });
+    expect(state['#banner']).toMatchObject({
+      hasClass: true,
+      outlineStyle: 'solid',
+    });
     expect(state['#modal']).toMatchObject({ hasClass: false });
 
-    await collision.first().getByRole('button', { name: 'Remove highlight' }).click();
+    await collision
+      .first()
+      .getByRole('button', { name: 'Remove highlight' })
+      .click();
     expect(await frameHasHighlightStyle(page)).toBe(false);
     expect(await frameFingerprint(page)).toEqual(clean);
   });

@@ -104,9 +104,9 @@ test.describe('project management', () => {
       .first()
       .getByLabel('Select device');
     await expect(select).toHaveValue('iphone-15');
-    await expect(
-      page.getByLabel('Shared preview URL')
-    ).toHaveValue(fixtureUrl('clean'));
+    await expect(page.getByLabel('Shared preview URL')).toHaveValue(
+      fixtureUrl('clean')
+    );
     await expect(previewFrames(page)).toHaveCount(1);
     await waitForFrameReady(page, 0);
   });
@@ -239,9 +239,7 @@ test.describe('project management', () => {
     await expect(previewFrames(page)).toHaveCount(0);
   });
 
-  test('two projects preserve independent configurations', async ({
-    page,
-  }) => {
+  test('two projects preserve independent configurations', async ({ page }) => {
     await clearAndReload(page);
 
     // Create project A with iPhone

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { projectRepository } from '../repositoryInstance';
 import { useProjectManagerStore } from '../manager/useProjectManagerStore';
+import {
+  exportProjectRecord,
+  generateExportFilename,
+  downloadTextFile,
+} from '../importExport';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Notice } from './Notice';
 import { ProjectMenu } from './ProjectMenu';
@@ -33,13 +38,18 @@ const CONFIRM_MESSAGES: Record<
     confirmLabel: 'Delete',
     destructive: true,
   },
+  import: {
+    title: 'Replace workspace?',
+    message: 'You have unsaved changes. Importing a project will discard them.',
+    confirmLabel: 'Import',
+  },
 };
 
 /**
  * ProjectBar — header controls for project management.
  *
  * Shows the current project name (editable), dirty indicator,
- * and New / Open / Save / Delete actions.
+ * and New / Open / Save / Delete / Import / Export actions.
  * Mounted in the Layout header.
  */
 export function ProjectBar() {
@@ -48,6 +58,7 @@ export function ProjectBar() {
   const isDirty = useProjectManagerStore((s) => s.isDirty);
   const busy = useProjectManagerStore((s) => s.busy);
   const error = useProjectManagerStore((s) => s.error);
+  const info = useProjectManagerStore((s) => s.info);
   const openMenuOpen = useProjectManagerStore((s) => s.openMenuOpen);
   const pendingConfirm = useProjectManagerStore((s) => s.pendingConfirm);
 
@@ -56,14 +67,18 @@ export function ProjectBar() {
   const saveProject = useProjectManagerStore((s) => s.saveProject);
   const deleteCurrent = useProjectManagerStore((s) => s.deleteProject);
   const rename = useProjectManagerStore((s) => s.rename);
+  const importProject = useProjectManagerStore((s) => s.importProject);
   const confirmPending = useProjectManagerStore((s) => s.confirmPending);
   const cancelPending = useProjectManagerStore((s) => s.cancelPending);
   const dismissError = useProjectManagerStore((s) => s.dismissError);
+  const dismissInfo = useProjectManagerStore((s) => s.dismissInfo);
 
   const [nameInput, setNameInput] = useState(name);
   const [editingName, setEditingName] = useState(false);
+  const [exportConfirm, setExportConfirm] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync name input when store name changes (e.g. after save/open/boot)
   useEffect(() => {
@@ -103,6 +118,47 @@ export function ProjectBar() {
     if (currentId) deleteCurrent(currentId);
   }, [currentId, deleteCurrent]);
 
+  // --- Import ---
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      // Reset input so re-selecting the same file fires change
+      e.target.value = '';
+
+      try {
+        const text = await file.text();
+        importProject(text);
+      } catch {
+        // File read error — show error via store
+        importProject('invalid');
+      }
+    },
+    [importProject]
+  );
+
+  // --- Export ---
+  const handleExport = useCallback(() => {
+    if (!currentId) return;
+
+    const result = projectRepository.get(currentId);
+    if (!result.ok) return;
+
+    const record = result.value;
+    const json = exportProjectRecord(record);
+    const filename = generateExportFilename(record.meta.name);
+    downloadTextFile(filename, json);
+  }, [currentId]);
+
+  const handleExportClick = useCallback(() => {
+    if (isDirty) {
+      setExportConfirm(true);
+      return;
+    }
+    handleExport();
+  }, [isDirty, handleExport]);
+
   // Fetch project list for menu (re-rendered when menu toggles)
   const projects = openMenuOpen ? projectRepository.list() : [];
 
@@ -113,6 +169,7 @@ export function ProjectBar() {
   return (
     <>
       {error && <Notice message={error} onDismiss={dismissError} />}
+      {info && <Notice message={info} variant="info" onDismiss={dismissInfo} />}
 
       <div className="flex items-center gap-2">
         {/* Project name (editable) */}
@@ -229,9 +286,46 @@ export function ProjectBar() {
             </svg>
           </button>
         )}
+
+        {/* Separator */}
+        <div
+          className="h-4 w-px bg-gray-200 dark:bg-gray-700"
+          aria-hidden="true"
+        />
+
+        {/* Import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImportFile}
+          className="sr-only"
+          aria-label="Import project file"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy}
+          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          aria-label="Import project"
+        >
+          Import
+        </button>
+
+        {/* Export */}
+        <button
+          type="button"
+          onClick={handleExportClick}
+          disabled={busy || !currentId}
+          title={!currentId ? 'Save a project before exporting' : undefined}
+          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800"
+          aria-label="Export project"
+        >
+          Export
+        </button>
       </div>
 
-      {/* Confirmation dialog */}
+      {/* Store confirmation dialog (new/open/delete/import) */}
       {pendingConfirm && confirmInfo && (
         <ConfirmDialog
           title={confirmInfo.title}
@@ -244,6 +338,20 @@ export function ProjectBar() {
           destructive={confirmInfo.destructive}
           onConfirm={confirmPending}
           onCancel={cancelPending}
+        />
+      )}
+
+      {/* Local export confirm dialog (dirty workspace) */}
+      {exportConfirm && (
+        <ConfirmDialog
+          title="Export saved version?"
+          message="You have unsaved changes. The last saved version will be exported."
+          confirmLabel="Export"
+          onConfirm={() => {
+            setExportConfirm(false);
+            handleExport();
+          }}
+          onCancel={() => setExportConfirm(false)}
         />
       )}
     </>

@@ -24,7 +24,15 @@ export {
   PROJECT_KEY_PREFIX,
   LAST_PROJECT_KEY,
 } from './storage';
-export { createProjectRepository } from './repository';
+export { createProjectRepository, parseAndValidateRecord } from './repository';
+export type { ProjectRepository } from './repository';
+export {
+  exportProjectRecord,
+  generateExportFilename,
+  slugifyName,
+  parseProjectImport,
+  downloadTextFile,
+} from './importExport';
 export { restoreLastProject } from './bootstrap';
 export type { BootedProject } from './bootstrap';
 export { projectRepository } from './repositoryInstance';
@@ -57,4 +65,3 @@ export type {
   Ok,
   Err,
 } from './types';
-export type { ProjectRepository } from './repository';

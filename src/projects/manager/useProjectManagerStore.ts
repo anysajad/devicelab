@@ -18,15 +18,22 @@ import { normalizeName } from '../validator';
 import { usePreviewStore } from '../../preview/store/usePreviewStore';
 import { projectRepository as defaultRepository } from '../repositoryInstance';
 import { computeDirty } from './dirty';
+import { parseProjectImport } from '../importExport';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface ConfirmPending {
-  readonly kind: 'new' | 'open' | 'delete';
+  readonly kind: 'new' | 'open' | 'delete' | 'import';
   readonly projectId?: string;
   readonly projectName?: string;
+}
+
+/** Data staged for import, awaiting confirmation when workspace is dirty. */
+interface PendingImport {
+  readonly name: string;
+  readonly data: ProjectData;
 }
 
 export interface ProjectManagerState {
@@ -48,6 +55,10 @@ export interface ProjectManagerState {
   openMenuOpen: boolean;
   /** Pending confirmation request, or null. */
   pendingConfirm: ConfirmPending | null;
+  /** Data staged for import, awaiting confirmation when workspace is dirty. */
+  pendingImport: PendingImport | null;
+  /** Info/success message (null = no message). */
+  info: string | null;
 }
 
 export interface ProjectManagerActions {
@@ -63,6 +74,8 @@ export interface ProjectManagerActions {
   rename: (name: string) => void;
   /** Delete a project by ID (confirms; resets workspace if current). */
   deleteProject: (id: string) => void;
+  /** Import a validated project from text. Returns true on success. */
+  importProject: (text: string) => boolean;
   /** Confirm the pending confirmation. */
   confirmPending: () => void;
   /** Cancel the pending confirmation. */
@@ -73,6 +86,8 @@ export interface ProjectManagerActions {
   closeOpenMenu: () => void;
   /** Dismiss the current error. */
   dismissError: () => void;
+  /** Dismiss the current info message. */
+  dismissInfo: () => void;
   /** Recompute dirty from current preview store state. */
   recomputeDirty: () => void;
 }
@@ -112,6 +127,30 @@ function buildActions(
 
   function resetWorkspace() {
     usePreviewStore.getState().reset();
+  }
+
+  function performImport(imported: PendingImport) {
+    set({ busy: true, error: null });
+    const result = repo.create(imported.data, imported.name);
+    if (!result.ok) {
+      set({ busy: false });
+      showError(`Could not import project: ${result.reason}`);
+      return;
+    }
+    const record = result.value;
+    hydrateFromData(record.data);
+    repo.setLastOpened(record.id);
+    set({
+      currentId: record.id,
+      name: record.meta.name,
+      savedData: record.data,
+      savedName: record.meta.name,
+      isDirty: false,
+      busy: false,
+      pendingConfirm: null,
+      pendingImport: null,
+      info: `Imported "${record.meta.name}".`,
+    });
   }
 
   return {
@@ -258,6 +297,29 @@ function buildActions(
       });
     },
 
+    importProject(text) {
+      if (get().busy) return false;
+
+      const parseResult = parseProjectImport(text);
+      if (!parseResult.ok) {
+        showError(`Import failed: ${parseResult.reason}`);
+        return false;
+      }
+
+      const record = parseResult.value;
+
+      if (get().isDirty) {
+        set({
+          pendingConfirm: { kind: 'import' },
+          pendingImport: { name: record.meta.name, data: record.data },
+        });
+        return true;
+      }
+
+      performImport({ name: record.meta.name, data: record.data });
+      return true;
+    },
+
     confirmPending() {
       const pending = get().pendingConfirm;
       if (!pending) return;
@@ -316,11 +378,21 @@ function buildActions(
           set({ isDirty: wasCurrent ? false : get().isDirty, busy: false });
           break;
         }
+
+        case 'import': {
+          const staged = get().pendingImport;
+          if (!staged) {
+            set({ busy: false });
+            return;
+          }
+          performImport(staged);
+          break;
+        }
       }
     },
 
     cancelPending() {
-      set({ pendingConfirm: null });
+      set({ pendingConfirm: null, pendingImport: null });
     },
 
     toggleOpenMenu() {
@@ -333,6 +405,10 @@ function buildActions(
 
     dismissError() {
       set({ error: null });
+    },
+
+    dismissInfo() {
+      set({ info: null });
     },
 
     recomputeDirty,
@@ -358,6 +434,8 @@ export function createProjectManagerStore(
       error: null,
       openMenuOpen: false,
       pendingConfirm: null,
+      pendingImport: null,
+      info: null,
       ...buildActions(
         get,
         set as (p: Partial<ProjectManagerState>) => void,

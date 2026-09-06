@@ -124,7 +124,16 @@ export async function readFrameMetrics(
  * page via contentDocument so it works for same-origin fixtures only.
  */
 export interface ElementGeometry {
-  rect: { x: number; y: number; left: number; top: number; right: number; bottom: number; width: number; height: number };
+  rect: {
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
   scrollWidth: number;
   scrollHeight: number;
   clientWidth: number;
@@ -148,7 +157,9 @@ export async function readElementGeometry(
 ): Promise<ElementGeometry> {
   return page.evaluate(
     ([sel, idx]) => {
-      const frames = document.querySelectorAll('iframe[title="Device preview"]');
+      const frames = document.querySelectorAll(
+        'iframe[title="Device preview"]'
+      );
       const f = frames[idx] as HTMLIFrameElement | undefined;
       if (!f || !f.contentDocument) throw new Error('preview frame not ready');
       const doc = f.contentDocument;
@@ -158,17 +169,28 @@ export async function readElementGeometry(
       const s = getComputedStyle(el);
       return {
         rect: {
-          x: r.x, y: r.y, left: r.left, top: r.top, right: r.right,
-          bottom: r.bottom, width: r.width, height: r.height,
+          x: r.x,
+          y: r.y,
+          left: r.left,
+          top: r.top,
+          right: r.right,
+          bottom: r.bottom,
+          width: r.width,
+          height: r.height,
         },
         scrollWidth: el.scrollWidth,
         scrollHeight: el.scrollHeight,
         clientWidth: el.clientWidth,
         clientHeight: el.clientHeight,
         computed: {
-          position: s.position, display: s.display, visibility: s.visibility,
-          overflowX: s.overflowX, overflowY: s.overflowY, whiteSpace: s.whiteSpace,
-          width: s.width, height: s.height,
+          position: s.position,
+          display: s.display,
+          visibility: s.visibility,
+          overflowX: s.overflowX,
+          overflowY: s.overflowY,
+          whiteSpace: s.whiteSpace,
+          width: s.width,
+          height: s.height,
         },
       };
     },
@@ -279,7 +301,9 @@ export async function frameHighlightState(
 ): Promise<Record<string, HighlightState>> {
   return page.evaluate(
     ([selList, idx]) => {
-      const frames = document.querySelectorAll('iframe[title="Device preview"]');
+      const frames = document.querySelectorAll(
+        'iframe[title="Device preview"]'
+      );
       const f = frames[idx] as HTMLIFrameElement | undefined;
       if (!f || !f.contentDocument) throw new Error('preview frame not ready');
       const doc = f.contentDocument;
@@ -350,15 +374,18 @@ export async function zoomToManual(
   const controls = previewControls(page, index);
   const label = controls.getByText(/^\d+%$/).first();
   await expect(label).toBeVisible();
-  const read = async () =>
-    parseInt((await label.textContent()) ?? '100', 10);
+  const read = async () => parseInt((await label.textContent()) ?? '100', 10);
   let current = await read();
   let guard = 0;
   while (current !== targetPercent && guard < 40) {
     if (targetPercent > current) {
-      await controls.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await controls
+        .getByRole('button', { name: 'Zoom in', exact: true })
+        .click();
     } else {
-      await controls.getByRole('button', { name: 'Zoom out', exact: true }).click();
+      await controls
+        .getByRole('button', { name: 'Zoom out', exact: true })
+        .click();
     }
     current = await read();
     guard += 1;
