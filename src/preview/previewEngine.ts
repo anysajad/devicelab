@@ -365,8 +365,13 @@ export function createPreviewController(): PreviewController {
     clearPending();
 
     if (sanitized === 'about:blank') {
-      // Empty or invalid input: keep the frame blank with no timers/probes.
+      // Empty or invalid input: keep the frame blank with no timers/probes and
+      // settle into a quiet 'idle' state instead of spinning forever on
+      // 'loading' (the first-use dead end).
+      lifecycle = 'idle';
+      error = null;
       iframe.src = 'about:blank';
+      emit();
       return;
     }
 
@@ -395,7 +400,10 @@ export function createPreviewController(): PreviewController {
 
     const sanitized = sanitizeUrl(currentConfig.url);
     if (sanitized === 'about:blank') {
+      lifecycle = 'idle';
+      error = null;
       iframe.src = 'about:blank';
+      emit();
       return;
     }
     beginNavigation(sanitized);

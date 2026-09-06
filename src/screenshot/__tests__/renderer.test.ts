@@ -113,6 +113,33 @@ describe('renderXhtmlToPng', () => {
     expect(await result).toBeNull();
   });
 
+  it('resolves null when image decode never settles (timeout)', async () => {
+    vi.useFakeTimers();
+    try {
+      const result = renderXhtmlToPng('<p>x</p>', 10, 10, {
+        // Image that fires neither onload nor onerror — a hang.
+        createImage: () => ({
+          onload: null,
+          onerror: null,
+          width: 0,
+          height: 0,
+          get src() {
+            return '';
+          },
+          set src(_v: string) {
+            /* never settles */
+          },
+        }),
+        createCanvas: () => makeCanvasLike() as unknown as HTMLCanvasElement,
+      });
+      // Allow the ~10s decode timeout to fire.
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(await result).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('embeds the XHTML inside an SVG foreignObject wrapper for browser decoding', async () => {
     let assignedSrc = '';
     const result = renderXhtmlToPng('<p>x</p>', 393, 852, {

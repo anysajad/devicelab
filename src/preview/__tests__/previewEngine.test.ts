@@ -282,6 +282,36 @@ describe('createPreviewController', () => {
     controller.destroy();
   });
 
+  it('empty URL settles into idle instead of spinning on loading forever', () => {
+    const controller = createPreviewController();
+    controller.load({
+      url: '',
+      device: iphone15,
+      orientation: 'portrait',
+    });
+
+    expect(controller.getState().lifecycle).toBe('idle');
+    expect(controller.getState().error).toBeNull();
+
+    controller.destroy();
+  });
+
+  it('reload() of a blank config settles into idle', () => {
+    const controller = createPreviewController();
+    controller.load({
+      url: '',
+      device: iphone15,
+      orientation: 'portrait',
+    });
+    expect(controller.getState().lifecycle).toBe('idle');
+
+    controller.reload();
+    expect(controller.getState().lifecycle).toBe('idle');
+    expect(controller.getState().error).toBeNull();
+
+    controller.destroy();
+  });
+
   it('setContainerSize() updates fit zoom without scaling the iframe', () => {
     const controller = createPreviewController();
     controller.load(makeConfig());
@@ -705,7 +735,7 @@ describe('createPreviewController', () => {
     }
   });
 
-  it('never times out an empty or invalid URL', () => {
+  it('never times out an empty or invalid URL — settles into idle', () => {
     vi.useFakeTimers();
 
     try {
@@ -714,7 +744,9 @@ describe('createPreviewController', () => {
 
       vi.advanceTimersByTime(PREVIEW_LOAD_TIMEOUT_MS * 2);
 
-      expect(controller.getState().lifecycle).toBe('loading');
+      // The blank preview settles into idle up front (never a stuck 'loading'
+      // and never a spurious timeout error).
+      expect(controller.getState().lifecycle).toBe('idle');
 
       controller.destroy();
     } finally {

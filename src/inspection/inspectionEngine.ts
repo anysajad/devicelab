@@ -126,8 +126,28 @@ export function inspectIframe(
   }
 
   if (!doc) {
+    // `iframe.contentDocument` is `null` in Chromium both for cross-origin
+    // frames (the document loads but is not readable) and for frames whose
+    // page never became readable. Classify cross-origin when the frame's own
+    // URL points at a different origin — that page loaded fine and is just
+    // blocked by the same-origin policy. Everything else (about:blank reset,
+    // unparseable/empty src, same-origin failure) stays honest as
+    // "contentDocument-unavailable" rather than blaming cross-origin.
+    let reason: InspectionInaccessibleReason = 'contentDocument-unavailable';
+    try {
+      const parsed = new URL(iframe.src, window.location.href);
+      if (
+        parsed.protocol !== 'about:' &&
+        parsed.origin !== 'null' &&
+        parsed.origin !== window.location.origin
+      ) {
+        reason = 'cross-origin';
+      }
+    } catch {
+      // Unparseable src — keep contentDocument-unavailable.
+    }
     return {
-      status: { status: 'inaccessible', reason: 'contentDocument-unavailable' },
+      status: { status: 'inaccessible', reason },
       inspectedAt,
     };
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef } from 'react';
 
 interface ConfirmDialogProps {
   /** Title of the dialog. */
@@ -17,11 +17,15 @@ interface ConfirmDialogProps {
   destructive?: boolean;
 }
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), a[href], select, textarea, input, [tabindex]:not([tabindex="-1"])';
+
 /**
  * Minimal accessible confirmation dialog.
  *
- * Renders a modal overlay with focus management, Escape key support,
- * and click-outside-to-cancel. No new dependencies.
+ * Renders a modal overlay with a focus trap, Escape key support, click-outside
+ * to cancel, and restores focus to the previously focused element on close.
+ * No new dependencies.
  */
 export function ConfirmDialog({
   title,
@@ -32,12 +36,26 @@ export function ConfirmDialog({
   onCancel,
   destructive = false,
 }: ConfirmDialogProps) {
+  const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
-  // Focus the cancel button on mount for safety
+  // Remember what had focus before the dialog opened, and focus the cancel
+  // button for safety on mount.
   useEffect(() => {
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     cancelRef.current?.focus();
+  }, []);
+
+  // Restore focus to the previously focused element on unmount (close).
+  useEffect(() => {
+    return () => {
+      restoreFocusRef.current?.focus();
+    };
   }, []);
 
   // Escape key
@@ -48,6 +66,26 @@ export function ConfirmDialog({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
+
+  // Focus trap: keep focus cycling inside the dialog while it is open.
+  const handleDialogKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = Array.from(
+      dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    ).filter((el) => !el.hasAttribute('disabled'));
+    if (focusable.length === 0) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }, []);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -62,14 +100,15 @@ export function ConfirmDialog({
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
+      aria-labelledby={titleId}
     >
       <div
         ref={dialogRef}
+        onKeyDown={handleDialogKeyDown}
         className="mx-4 max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-900"
       >
         <h2
-          id="confirm-dialog-title"
+          id={titleId}
           className="text-lg font-semibold text-gray-900 dark:text-gray-100"
         >
           {title}

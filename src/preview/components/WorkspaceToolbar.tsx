@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getDevicesByCategory } from '@/devices';
 import type { DeviceCategory, DeviceDefinition } from '@/devices';
@@ -17,9 +17,20 @@ const CATEGORY_ORDER: DeviceCategory[] = ['phone', 'tablet', 'desktop'];
 interface WorkspaceToolbarProps {
   /** Whether the workspace has any entries (for UI state). */
   hasEntries: boolean;
+  /**
+   * Optional controlled Add Device menu state. When `onAddMenuOpenChange` is
+   * provided the toolbar defers menu visibility to the parent (so the
+   * empty-state CTA can open it); otherwise it manages its own local state.
+   */
+  addMenuOpen?: boolean;
+  onAddMenuOpenChange?: (open: boolean) => void;
 }
 
-export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
+export function WorkspaceToolbar({
+  hasEntries,
+  addMenuOpen,
+  onAddMenuOpenChange,
+}: WorkspaceToolbarProps) {
   const sharedUrl = usePreviewStore((s) => s.sharedUrl);
   const setSharedUrl = usePreviewStore((s) => s.setSharedUrl);
   const entries = usePreviewStore((s) => s.entries);
@@ -34,7 +45,17 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
 
   const [urlInput, setUrlInput] = useState(sharedUrl);
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled = addMenuOpen !== undefined;
+  const open = isControlled ? addMenuOpen : internalOpen;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (isControlled) onAddMenuOpenChange?.(next);
+      else setInternalOpen(next);
+    },
+    [isControlled, onAddMenuOpenChange]
+  );
 
   const grouped = CATEGORY_ORDER.map((cat) => ({
     category: cat,
@@ -73,13 +94,79 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
     [handleSubmitUrl]
   );
 
+  // --- Add Device menu keyboard semantics + outside-click dismissal ---
+  const addMenuWrapperRef = useRef<HTMLDivElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const firstItem =
+      addMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    firstItem?.focus();
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (
+        addMenuWrapperRef.current &&
+        !addMenuWrapperRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open, setOpen]);
+
+  const handleMenuKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const items = Array.from(
+        addMenuRef.current?.querySelectorAll<HTMLElement>(
+          '[role="menuitem"]'
+        ) ?? []
+      );
+      if (items.length === 0) return;
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      let next = index;
+      switch (e.key) {
+        case 'ArrowDown':
+          next = index < 0 ? 0 : (index + 1) % items.length;
+          e.preventDefault();
+          break;
+        case 'ArrowUp':
+          next = index <= 0 ? items.length - 1 : index - 1;
+          e.preventDefault();
+          break;
+        case 'Home':
+          next = 0;
+          e.preventDefault();
+          break;
+        case 'End':
+          next = items.length - 1;
+          e.preventDefault();
+          break;
+        case 'Escape':
+          setOpen(false);
+          addButtonRef.current?.focus();
+          e.preventDefault();
+          return;
+        default:
+          return;
+      }
+      items[next]?.focus();
+    },
+    [setOpen]
+  );
+
   const handleAddDevice = useCallback(
     (deviceId: string) => {
       addEntry(deviceId);
-      setShowAddMenu(false);
+      setOpen(false);
     },
-    [addEntry]
+    [addEntry, setOpen]
   );
+
+  const handleAddMenuToggle = useCallback(() => {
+    setOpen(!open);
+  }, [open, setOpen]);
 
   const handleCompareClick = useCallback(() => {
     if (layoutMode === 'compare') {
@@ -134,13 +221,14 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
       />
 
       {/* Add Device */}
-      <div className="relative">
+      <div className="relative" ref={addMenuWrapperRef}>
         <button
+          ref={addButtonRef}
           type="button"
-          onClick={() => setShowAddMenu(!showAddMenu)}
+          onClick={handleAddMenuToggle}
           className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
           aria-label="Add device"
-          aria-expanded={showAddMenu}
+          aria-expanded={open}
           aria-haspopup="true"
         >
           <svg
@@ -159,8 +247,13 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
           Add Device
         </button>
 
-        {showAddMenu && (
-          <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900">
+        {open && (
+          <div
+            ref={addMenuRef}
+            role="menu"
+            className="absolute left-0 top-full z-20 mt-1 max-h-80 w-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
+            onKeyDown={handleMenuKeyDown}
+          >
             {grouped.map((group) => (
               <div key={group.category}>
                 <div className="border-b border-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
@@ -170,8 +263,9 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
                   <button
                     key={d.id}
                     type="button"
+                    role="menuitem"
                     onClick={() => handleAddDevice(d.id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
                   >
                     <span className="font-medium">{d.name}</span>
                     <span className="text-xs text-gray-400 dark:text-gray-500">

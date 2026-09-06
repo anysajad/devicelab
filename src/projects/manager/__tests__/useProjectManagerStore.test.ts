@@ -264,19 +264,30 @@ describe('ProjectManagerStore', () => {
       }
     });
 
-    it('returns error when project disappeared externally', () => {
+    it('returns error when project disappeared externally and recovers as a new project', () => {
       const { store, repo } = createManagerWithMemoryRepo();
       store.getState().initialize(null);
       usePreviewStore.getState().addEntry('iphone-15');
       store.getState().saveProject();
 
       const currentId = store.getState().currentId!;
+      const savedName = store.getState().name;
       repo.remove(currentId); // simulate external deletion
 
       const ok = store.getState().saveProject();
       expect(ok).toBe(false);
       expect(store.getState().error).toContain('no longer exists');
       expect(store.getState().isDirty).toBe(true);
+
+      // Recovery: the dead id is dropped but the typed name survives, so a
+      // subsequent save creates a fresh record instead of discarding work.
+      expect(store.getState().currentId).toBeNull();
+      expect(store.getState().name).toBe(savedName);
+
+      const recovered = store.getState().saveProject();
+      expect(recovered).toBe(true);
+      expect(store.getState().currentId).not.toBeNull();
+      expect(store.getState().isDirty).toBe(false);
     });
   });
 

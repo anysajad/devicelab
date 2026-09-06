@@ -238,4 +238,112 @@ describe('InspectionsPanel', () => {
     expect(screen.getByText('Compare issue')).toBeInTheDocument();
     expect(screen.queryByText('Non-selected issue')).not.toBeInTheDocument();
   });
+
+  it('does not claim "No issues" for an unscanned device (honest idle state)', () => {
+    const id = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().setInspectionResult(id, { phase: 'idle' });
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    expect(screen.getByText('Not scanned')).toBeInTheDocument();
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+    // No "scanned" badge while the device has not been scanned.
+    expect(screen.queryByText(/device scanned/)).not.toBeInTheDocument();
+  });
+
+  it('labels a cross-origin page as such instead of "No issues"', () => {
+    const id = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().setInspectionResult(id, {
+      phase: 'inaccessible',
+      inaccessibleReason: 'cross-origin',
+    });
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    expect(
+      screen.getByText(/Some pages are cross-origin and cannot be inspected/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Cross-origin — cannot be inspected')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+  });
+
+  it('labels a contentDocument-unavailable page distinctly', () => {
+    const id = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().setInspectionResult(id, {
+      phase: 'inaccessible',
+      inaccessibleReason: 'contentDocument-unavailable',
+    });
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    expect(
+      screen.getByText(/browser could not access the page/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+  });
+
+  it('labels a failed inspection with its message instead of "No issues"', () => {
+    const id = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().setInspectionResult(id, {
+      phase: 'error',
+      errorMessage: 'Inspection crashed',
+    });
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    expect(screen.getByText('Inspection failed')).toBeInTheDocument();
+    expect(screen.getByText('Inspection crashed')).toBeInTheDocument();
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+  });
+
+  it('gates the "scanned" badge on ALL visible devices being scanned', () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setInspectionResult(id1, {
+      phase: 'ready',
+      inspectedAt: 1000,
+      diagnostics: [],
+      elementsScanned: 3,
+    });
+    // id2 has no result yet (phase idle).
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    // Not all visible devices are scanned => no "N devices scanned" badge and
+    // no "No issues found" claim (the unscanned device is shown honestly).
+    expect(screen.queryByText(/device scanned/)).not.toBeInTheDocument();
+    expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
+    expect(screen.getByText('Not scanned')).toBeInTheDocument();
+  });
+
+  it('scoped badge for focus mode reflects the active device only', () => {
+    const id1 = usePreviewStore.getState().addEntry('iphone-15');
+    usePreviewStore.getState().addEntry('ipad');
+    usePreviewStore.getState().setLayoutMode('focus');
+    usePreviewStore.getState().setActiveId(id1);
+    usePreviewStore.getState().setInspectionResult(id1, {
+      phase: 'ready',
+      inspectedAt: 1000,
+      diagnostics: [],
+      elementsScanned: 3,
+    });
+
+    render(
+      <InspectionsPanel getController={getController} onClose={onClose} />
+    );
+
+    expect(screen.getByText('1 device scanned')).toBeInTheDocument();
+  });
 });

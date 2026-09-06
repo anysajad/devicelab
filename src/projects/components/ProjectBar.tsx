@@ -90,6 +90,17 @@ export function ProjectBar() {
     if (editingName) nameInputRef.current?.focus();
   }, [editingName]);
 
+  // Warn before leaving/reloading the tab while there are unsaved changes.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
   const handleNameBlur = useCallback(() => {
     setEditingName(false);
     const trimmed = nameInput.trim();
@@ -171,7 +182,7 @@ export function ProjectBar() {
       {error && <Notice message={error} onDismiss={dismissError} />}
       {info && <Notice message={info} variant="info" onDismiss={dismissInfo} />}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Project name (editable) */}
         {editingName ? (
           <input

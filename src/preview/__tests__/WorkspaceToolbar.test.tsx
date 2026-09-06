@@ -73,4 +73,53 @@ describe('WorkspaceToolbar', () => {
     await user.type(input, 'h');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('add device menu exposes keyboard navigation and Escape close', async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceToolbar hasEntries={false} />);
+
+    const trigger = screen.getByRole('button', { name: 'Add device' });
+
+    // Open the menu: first menuitem receives focus.
+    await user.click(trigger);
+    const items = screen.getAllByRole('menuitem');
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0]).toHaveFocus();
+
+    const firstFocusable = items[0]!;
+    const lastFocusable = items[items.length - 1]!;
+
+    // Arrow down wraps to the next item from the first.
+    await user.keyboard('{ArrowDown}');
+    expect(items[1]).toHaveFocus();
+
+    // Arrow up wraps back to the first.
+    await user.keyboard('{ArrowUp}');
+    expect(firstFocusable).toHaveFocus();
+
+    // End jumps to the last item.
+    await user.keyboard('{End}');
+    expect(lastFocusable).toHaveFocus();
+
+    // Home jumps back to the first.
+    await user.keyboard('{Home}');
+    expect(firstFocusable).toHaveFocus();
+
+    // Escape closes the menu and restores focus to the trigger.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('selecting a device closes the menu and adds the entry', async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceToolbar hasEntries={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add device' }));
+    await user.click(screen.getByRole('menuitem', { name: /^iPhone 15 \d/ }));
+
+    expect(usePreviewStore.getState().entries).toHaveLength(1);
+    expect(usePreviewStore.getState().entries[0]?.deviceId).toBe('iphone-15');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
 });

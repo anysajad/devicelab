@@ -389,6 +389,33 @@ export function PreviewInstance({
           </div>
         )}
 
+        {/* Empty-state placeholder (no URL yet) */}
+        {state.lifecycle === 'idle' && effectiveUrl === '' && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center"
+            role="status"
+          >
+            <div className="flex flex-col items-center gap-3 text-gray-400 dark:text-gray-500">
+              <svg
+                className="h-8 w-8"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"
+                />
+              </svg>
+              <p className="text-sm">
+                Enter a URL above to preview this device
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Preview frame */}
         {hasLoaded && state.lifecycle !== 'error' && (
           <PreviewFrame

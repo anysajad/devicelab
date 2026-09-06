@@ -185,6 +185,34 @@ describe('inspectIframe', () => {
     }
   });
 
+  it('reports a real cross-origin frame as cross-origin even when contentDocument is null', () => {
+    const iframe = document.createElement('iframe');
+    iframe.src = 'http://cross-origin.example/fixtures/clean.html';
+    Object.defineProperty(iframe, 'contentDocument', {
+      value: null,
+      configurable: true,
+    });
+    const result = inspectIframe(iframe, { width: 375, height: 812 });
+    expect(result.status.status).toBe('inaccessible');
+    if (result.status.status === 'inaccessible') {
+      expect(result.status.reason).toBe('cross-origin');
+    }
+  });
+
+  it('keeps contentDocument-unavailable for an about:blank frame', () => {
+    const iframe = document.createElement('iframe');
+    iframe.src = 'about:blank';
+    Object.defineProperty(iframe, 'contentDocument', {
+      value: null,
+      configurable: true,
+    });
+    const result = inspectIframe(iframe, { width: 375, height: 812 });
+    expect(result.status.status).toBe('inaccessible');
+    if (result.status.status === 'inaccessible') {
+      expect(result.status.reason).toBe('contentDocument-unavailable');
+    }
+  });
+
   it('returns inaccessible reason cross-origin when access throws', () => {
     const iframe = document.createElement('iframe');
     Object.defineProperty(iframe, 'contentDocument', {

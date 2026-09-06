@@ -24,7 +24,7 @@ export async function setSharedUrl(page: Page, url: string): Promise<void> {
 export async function addDevice(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: 'Add device', exact: true }).click();
   await page
-    .getByRole('button', { name: new RegExp(name) })
+    .getByRole('menuitem', { name: new RegExp(name) })
     .first()
     .click();
 }
@@ -396,12 +396,15 @@ export async function zoomToManual(
 /**
  * The preview card that owns the given instance's toolbar. Grid/compare/focus
  * cards all share the `rounded-xl` card wrapper; `nth(index)` keeps the card
- * matched to the same instance ordering as previewControls(index).
+ * matched to the same instance ordering as previewControls(index). Cards stay
+ * mounted in every layout mode (visibility is toggled), so all matching cards
+ * retain their `<nav>` and document order drives the index.
  */
 export function previewCard(page: Page, index = 0): Locator {
   return page
     .locator('div.rounded-xl')
-    .filter({ has: previewControls(page, index) });
+    .filter({ has: page.locator('nav[aria-label="Preview controls"]') })
+    .nth(index);
 }
 
 /**

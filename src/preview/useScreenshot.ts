@@ -64,13 +64,11 @@ export function useScreenshot(
       const state = controller.getState();
       const iframe = controller.getIframe();
 
-      // Honest guard: a failed/error preview must never be captured. In
-      // Chromium the error-state document is not reliably distinguishable from
-      // a valid one through the sandboxed frame, so guard at the integration
-      // layer — surface the unsupported status instead of risking a fabricated
-      // screenshot. (Found while validating the honest contract in real
-      // Chromium.)
-      if (state.lifecycle === 'error') {
+      // Honest guard: only a fully-loaded preview can be captured. An error
+      // state, a still-loading page, or an idle/blank page must never produce a
+      // fabricated image — surface the not-ready status before the capturer
+      // runs. (Found while validating the honest contract in real Chromium.)
+      if (state.lifecycle !== 'ready') {
         setStatus('not-ready');
         return;
       }

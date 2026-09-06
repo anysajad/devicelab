@@ -39,8 +39,10 @@ import {
  * Ground rules honored here:
  * - Auto-fit zoom percent is container-dependent; it is never asserted as an
  *   absolute number.
- * - Zoom persistence is only asserted while the PreviewInstance stays mounted;
- *   any layout transition remounts instances (fresh controller => fit zoom).
+ * - Preview instances are ALWAYS mounted (one PreviewInstance per entry); a
+ *   layout transition only changes which cards are CSS-visible, so controllers,
+ *   iframes, zoom, and inspection snapshots persist across Grid/Focus/Compare
+ *   switches — never reset to fit / idle.
  * - The app surfaces the DEVICE's DPR (a preset value), never the outer
  *   browser's devicePixelRatio.
  */
@@ -90,15 +92,20 @@ test.describe('layout transitions + workspace invariants', () => {
     expect(await zoomLabelValue(page, 1)).toBe(before);
   });
 
-  test('focus: mounts exactly the active instance; thumbnails switch it', async ({
+  test('focus: only the active card is visible; thumbnails switch it (instances persist)', async ({
     page,
   }) => {
     await setup(page, ['iPhone SE', 'iPhone 15', 'iPad']);
     await expect(previewFrames(page)).toHaveCount(3);
 
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(3);
     await waitForFrameReady(page, 0);
+
+    // Instances stay mounted; focus only toggles which card is visible.
+    await expect(previewCard(page, 0)).toBeVisible();
+    await expect(previewCard(page, 1)).not.toBeVisible();
+    await expect(previewCard(page, 2)).not.toBeVisible();
 
     await expect(
       page.getByRole('button', { name: /^iPhone SE preview \(active\)$/ })
@@ -109,13 +116,14 @@ test.describe('layout transitions + workspace invariants', () => {
 
     await page.getByRole('button', { name: /^iPad preview$/ }).click();
     await waitForFrameReady(page, 0);
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewCard(page, 2)).toBeVisible();
+    await expect(previewCard(page, 0)).not.toBeVisible();
     await expect(
       page.getByRole('button', { name: /^iPad preview \(active\)$/ })
     ).toBeVisible();
   });
 
-  test('grid → focus → grid preserves config and restores fit zoom (no ghost frames)', async ({
+  test('grid → focus → grid preserves config, zoom, and orientation (no ghost frames)', async ({
     page,
   }) => {
     await setup(page, ['iPhone SE', 'iPhone 15', 'iPad']);
@@ -124,7 +132,7 @@ test.describe('layout transitions + workspace invariants', () => {
     await waitForFrameReady(page, 1);
 
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(3);
     await waitForFrameReady(page, 0);
 
     await page.getByRole('button', { name: 'Grid layout' }).click();
@@ -150,7 +158,8 @@ test.describe('layout transitions + workspace invariants', () => {
       })
     ).toHaveAttribute('aria-pressed', 'true');
 
-    // Remounts create fresh controllers => fit zoom, never stale manual zoom.
+    // Instances persist across layout switches => fit/zoom state is preserved
+    // (never reset to fit by a fresh controller).
     for (let i = 0; i < 3; i++) {
       await expect(
         previewControls(page, i).getByRole('button', {
@@ -171,7 +180,8 @@ test.describe('layout transitions + workspace invariants', () => {
     await setup(page, ['iPhone SE', 'iPhone 15']);
 
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(2);
+    await expect(previewCard(page, 0)).toBeVisible();
     await waitForFrameReady(page, 0);
 
     await previewControls(page, 0)
@@ -185,38 +195,42 @@ test.describe('layout transitions + workspace invariants', () => {
     ).toBeVisible();
   });
 
-  test('compare: selections mount/unmount; dropping below 2 exits to grid', async ({
+  test('compare: selections toggle visibility; dropping below 2 exits to grid', async ({
     page,
   }) => {
     await setup(page, ['iPhone SE', 'iPhone 15', 'iPad']);
 
     await page.getByRole('button', { name: 'Compare layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(2);
+    await expect(previewFrames(page)).toHaveCount(3);
+    await expect(previewCard(page, 0)).toBeVisible();
+    await expect(previewCard(page, 1)).toBeVisible();
+    await expect(previewCard(page, 2)).not.toBeVisible();
     await waitForFrameReady(page, 1);
 
     await page.getByRole('checkbox', { name: /^Compare iPad$/ }).click();
-    await expect(previewFrames(page)).toHaveCount(3);
+    await expect(previewCard(page, 2)).toBeVisible();
     await waitForFrameReady(page, 2);
 
     await page
       .getByRole('checkbox', { name: /^Compare iPhone SE \(selected\)$/ })
       .click();
-    await expect(previewFrames(page)).toHaveCount(2);
+    await expect(previewCard(page, 0)).not.toBeVisible();
+    await expect(previewCard(page, 1)).toBeVisible();
     await waitForFrameReady(page, 1);
 
     await page
       .getByRole('checkbox', { name: /^Compare iPhone 15 \(selected\)$/ })
       .click();
-    await expect(previewFrames(page)).toHaveCount(3);
     await expect(
       page.getByRole('button', { name: 'Grid layout' })
     ).toHaveAttribute('aria-pressed', 'true');
     for (let i = 0; i < 3; i++) {
+      await expect(previewCard(page, i)).toBeVisible();
       await waitForFrameReady(page, i);
     }
   });
 
-  test('inspection stays callable across layout transitions (Rescan recovers)', async ({
+  test('inspection stays callable across layout transitions (results persist)', async ({
     page,
   }) => {
     await setup(page, ['iPhone SE', 'iPhone 15']);
@@ -225,18 +239,15 @@ test.describe('layout transitions + workspace invariants', () => {
       inspectionsPanel(page).getByText('2 devices scanned')
     ).toBeVisible();
 
-    // Layout switches REMOUNT every preview instance. Documented existing
-    // semantics (see usePreviewInspection + PreviewInstance): the remounted
-    // instance's inspection snapshot resets to idle and does not auto-rerun
-    // until Inspect/Rescan is clicked; the panel surfaces the idle prompt.
+    // Instances persist across layout switches => inspection results survive
+    // the transition instead of being reset to the idle prompt. In focus mode
+    // the panel scopes to the active device.
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(2);
     await waitForFrameReady(page, 0);
     await expect(inspectionsPanel(page)).toBeVisible();
     await expect(
-      inspectionsPanel(page).getByText(
-        'Click Inspect or Rescan to check for issues'
-      )
+      inspectionsPanel(page).getByText('1 device scanned')
     ).toBeVisible();
 
     await page.getByRole('button', { name: 'Grid layout' }).click();
@@ -451,7 +462,7 @@ test.describe('custom viewport', () => {
     await waitForFrameReady(page, 1);
 
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(2);
     await waitForFrameReady(page, 0);
     await expect(
       page.getByRole('button', {
@@ -668,7 +679,7 @@ test.describe('lifecycle robustness', () => {
       .click();
     await expect(previewFrames(page)).toHaveCount(0);
     await expect(
-      page.getByText('Add a device above to start previewing')
+      page.getByRole('button', { name: 'Add a device', exact: true })
     ).toBeVisible();
 
     await addDevice(page, 'iPhone 15');
@@ -702,11 +713,11 @@ test.describe('lifecycle robustness', () => {
     await expect(previewFrames(page)).toHaveCount(3);
 
     await page.getByRole('button', { name: 'Focus layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(1);
+    await expect(previewFrames(page)).toHaveCount(3);
     await waitForFrameReady(page, 0);
 
     await page.getByRole('button', { name: 'Compare layout' }).click();
-    await expect(previewFrames(page)).toHaveCount(2);
+    await expect(previewFrames(page)).toHaveCount(3);
     await waitForFrameReady(page, 1);
 
     await page.getByRole('button', { name: 'Grid layout' }).click();

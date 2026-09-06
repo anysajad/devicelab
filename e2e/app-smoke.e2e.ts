@@ -15,7 +15,7 @@ test.describe('app smoke', () => {
   }) => {
     await gotoApp(page);
     await expect(
-      page.getByText('Add a device above to start previewing')
+      page.getByRole('button', { name: 'Add a device', exact: true })
     ).toBeVisible();
 
     await setSharedUrl(page, fixtureUrl('clean'));

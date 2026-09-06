@@ -234,7 +234,7 @@ test.describe('project management', () => {
 
     // Workspace should be empty
     await expect(
-      page.getByText('Add a device above to start previewing')
+      page.getByRole('button', { name: 'Add a device', exact: true })
     ).toBeVisible();
     await expect(previewFrames(page)).toHaveCount(0);
   });

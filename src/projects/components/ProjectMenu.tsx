@@ -10,8 +10,9 @@ interface ProjectMenuProps {
 
 /**
  * Project menu dropdown listing available projects.
- * Each row has Open and Delete actions.
- * Closes on outside click or Escape.
+ * Each row has Open and Delete menuitems.
+ * Closes on outside click or Escape; supports arrow-key navigation and
+ * restores focus to the trigger on close.
  */
 export function ProjectMenu({ projects }: ProjectMenuProps) {
   const openId = useProjectManagerStore((s) => s.currentId);
@@ -19,17 +20,11 @@ export function ProjectMenu({ projects }: ProjectMenuProps) {
   const deleteProject = useProjectManagerStore((s) => s.deleteProject);
   const closeMenu = useProjectManagerStore((s) => s.closeOpenMenu);
   const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         closeMenu();
       }
     }
@@ -37,14 +32,58 @@ export function ProjectMenu({ projects }: ProjectMenuProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [closeMenu]);
 
-  // Escape key
+  // Keyboard: Escape closes the menu; Arrow/Home/End navigate the items.
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ??
+          []
+      );
+      if (items.length === 0) return;
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      let next = index;
+      switch (e.key) {
+        case 'ArrowDown':
+          next = index < 0 ? 0 : (index + 1) % items.length;
+          e.preventDefault();
+          break;
+        case 'ArrowUp':
+          next = index <= 0 ? items.length - 1 : index - 1;
+          e.preventDefault();
+          break;
+        case 'Home':
+          next = 0;
+          e.preventDefault();
+          break;
+        case 'End':
+          next = items.length - 1;
+          e.preventDefault();
+          break;
+        case 'Escape':
+          closeMenu();
+          e.preventDefault();
+          return;
+        default:
+          return;
+      }
+      items[next]?.focus();
+    },
+    [closeMenu]
+  );
+
+  // Focus the first menuitem on open, restore focus to the trigger on close.
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') closeMenu();
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [closeMenu]);
+    const restoreRef =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const firstItem =
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    firstItem?.focus();
+    return () => {
+      restoreRef?.focus();
+    };
+  }, []);
 
   const handleOpen = useCallback(
     (id: string) => {
@@ -81,6 +120,7 @@ export function ProjectMenu({ projects }: ProjectMenuProps) {
       className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
       role="menu"
       aria-label="Open project"
+      onKeyDown={handleKeyDown}
     >
       <div className="border-b border-gray-100 px-3 py-2 text-xs font-medium text-gray-500 dark:border-gray-800 dark:text-gray-400">
         Recent projects
@@ -112,6 +152,7 @@ export function ProjectMenu({ projects }: ProjectMenuProps) {
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={(e) => handleDelete(e, p.id)}
             className="ml-2 flex-shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:text-gray-500 dark:hover:bg-red-950 dark:hover:text-red-400"
             aria-label={`Delete ${p.name}`}

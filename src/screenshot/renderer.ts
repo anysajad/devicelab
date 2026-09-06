@@ -84,6 +84,20 @@ export function renderXhtmlToPng(
   const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
   return new Promise<Blob | null>((resolve) => {
+    // Guard against a decode that never settles: if the image neither fires
+    // onload nor onerror (regression in some embedded/obscured contexts), the
+    // capture used to hang the whole call chain indefinitely. The timeout
+    // resolves null so the capturer surfaces `render-failed`.
+    const RENDER_DECODE_TIMEOUT_MS = 10_000;
+    let settled = false;
+    const finish = (blob: Blob | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(blob);
+    };
+    const timeoutId = setTimeout(() => finish(null), RENDER_DECODE_TIMEOUT_MS);
+
     const img = createImage();
     img.width = width;
     img.height = height;
@@ -91,35 +105,35 @@ export function renderXhtmlToPng(
     img.onload = () => {
       const canvas = createCanvas(width, height);
       if (!canvas) {
-        resolve(null);
+        finish(null);
         return;
       }
       const canvasRef = canvas as CanvasLike;
       const ctx = canvasRef.getContext('2d');
       if (!ctx) {
-        resolve(null);
+        finish(null);
         return;
       }
       ctx.drawImage(img, 0, 0, width, height);
 
       if (typeof canvasRef.toBlob === 'function') {
         canvasRef.toBlob!((blob) => {
-          resolve(blob);
+          finish(blob);
         }, 'image/png');
       } else if (typeof canvasRef.toDataURL === 'function') {
         try {
           const dataUrlResult = canvasRef.toDataURL!();
-          resolve(dataUrlResult ? dataUrlToBlob(dataUrlResult) : null);
+          finish(dataUrlResult ? dataUrlToBlob(dataUrlResult) : null);
         } catch {
-          resolve(null);
+          finish(null);
         }
       } else {
-        resolve(null);
+        finish(null);
       }
     };
 
     img.onerror = () => {
-      resolve(null);
+      finish(null);
     };
 
     img.src = dataUrl;

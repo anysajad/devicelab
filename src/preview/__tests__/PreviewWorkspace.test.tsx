@@ -373,7 +373,12 @@ describe('PreviewWorkspace (multi-device)', () => {
   it('shows empty state when no entries', () => {
     render(<PreviewWorkspace />);
     expect(
-      screen.getByText('Add a device above to start previewing')
+      screen.getByText(
+        'Start by adding a device below, then set a URL to preview it.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add a device' })
     ).toBeInTheDocument();
   });
 
@@ -411,9 +416,14 @@ describe('PreviewWorkspace (multi-device)', () => {
     usePreviewStore.getState().addEntry('ipad');
     usePreviewStore.getState().setLayoutMode('focus');
     render(<PreviewWorkspace />);
-    // Active preview (iPhone 15) should appear as PreviewInstance (has PreviewToolbar)
-    // iPad should appear as thumbnail only (no PreviewToolbar)
-    expect(screen.getByLabelText('Preview controls')).toBeInTheDocument();
+
+    // Instances stay mounted in focus mode; only the active one is visible.
+    const toolbars = screen.getAllByLabelText('Preview controls');
+    expect(toolbars).toHaveLength(2);
+    // The active card omits the `hidden` class; the inactive card carries it.
+    expect(toolbars[0]!.closest('div.rounded-xl')).not.toHaveClass('hidden');
+    expect(toolbars[1]!.closest('div.rounded-xl')).toHaveClass('hidden');
+
     // Thumbnail should show iPad
     expect(screen.getByLabelText('iPad preview')).toBeInTheDocument();
   });
@@ -497,7 +507,7 @@ describe('PreviewWorkspace (multi-device)', () => {
   it('empty workspace shows add instruction', () => {
     render(<PreviewWorkspace />);
     expect(
-      screen.getByText('Add a device above to start previewing')
+      screen.getByRole('button', { name: 'Add a device' })
     ).toBeInTheDocument();
   });
 
@@ -554,15 +564,17 @@ describe('PreviewWorkspace (multi-device)', () => {
     render(<PreviewWorkspace />);
 
     await userEvent.click(screen.getByLabelText('Focus layout'));
-    // Only the active preview is shown; its rulers toggle is present.
+    // Both instances stay mounted; only the active one is visible.
     const toggles = screen.getAllByLabelText('Toggle rulers');
-    expect(toggles).toHaveLength(1);
+    expect(toggles).toHaveLength(2);
+    expect(toggles[0]!.closest('div.rounded-xl')).not.toHaveClass('hidden');
+    expect(toggles[1]!.closest('div.rounded-xl')).toHaveClass('hidden');
 
-    await userEvent.click(screen.getByLabelText('Toggle grid overlay'));
-    expect(screen.getByLabelText('Toggle grid overlay')).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
+    const gridToggles = screen.getAllByLabelText('Toggle grid overlay');
+    expect(gridToggles).toHaveLength(2);
+    await userEvent.click(gridToggles[0]!);
+    expect(gridToggles[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(gridToggles[1]).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('compare mode: each compared instance exposes viewport-tool toggles', async () => {
@@ -583,9 +595,11 @@ describe('PreviewWorkspace (multi-device)', () => {
     usePreviewStore.getState().setLayoutMode('focus');
     render(<PreviewWorkspace />);
 
-    // Only one PreviewToolbar (with controls)
+    // All instances are mounted, but only the active one is visible.
     const toolbars = screen.getAllByLabelText('Preview controls');
-    expect(toolbars).toHaveLength(1);
+    expect(toolbars).toHaveLength(2);
+    expect(toolbars[0]!.closest('div.rounded-xl')).not.toHaveClass('hidden');
+    expect(toolbars[1]!.closest('div.rounded-xl')).toHaveClass('hidden');
 
     // Thumbnails exist but have no controls
     expect(
@@ -665,8 +679,9 @@ describe('PreviewWorkspace (multi-device)', () => {
       screen.getByLabelText('iPhone 15 preview (active)')
     ).toBeInTheDocument();
 
-    // Remove the active entry
-    await userEvent.click(screen.getByLabelText('Remove preview'));
+    // Remove the active entry (both instances stay mounted in focus mode)
+    const removeButtons = screen.getAllByLabelText('Remove preview');
+    await userEvent.click(removeButtons[0]!);
 
     // iPad should now be active
     expect(screen.getByLabelText('iPad preview (active)')).toBeInTheDocument();
@@ -679,7 +694,9 @@ describe('PreviewWorkspace (multi-device)', () => {
     await userEvent.click(screen.getByLabelText('Remove preview'));
 
     expect(
-      screen.getByText('Add a device above to start previewing')
+      screen.getByText(
+        'Start by adding a device below, then set a URL to preview it.'
+      )
     ).toBeInTheDocument();
   });
 
@@ -895,8 +912,12 @@ describe('PreviewWorkspace (multi-device)', () => {
     usePreviewStore.getState().enterCompareMode([id1, id2]);
     render(<PreviewWorkspace />);
 
+    // Instances stay mounted; compare only toggles visibility.
     const selects = screen.getAllByLabelText('Select device');
-    expect(selects).toHaveLength(2);
+    expect(selects).toHaveLength(3);
+    expect(selects[0]!.closest('div.rounded-xl')).not.toHaveClass('hidden');
+    expect(selects[1]!.closest('div.rounded-xl')).not.toHaveClass('hidden');
+    expect(selects[2]!.closest('div.rounded-xl')).toHaveClass('hidden');
   });
 
   it('compare mode: checkbox toggles selection', async () => {

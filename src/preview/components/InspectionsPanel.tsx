@@ -4,7 +4,11 @@ import { getDeviceById } from '@/devices';
 import type { Diagnostic, DiagnosticSeverity } from '@/inspection';
 import { clearAllIframeHighlights } from '../inspection/highlight';
 import { usePreviewStore } from '../store/usePreviewStore';
-import type { PreviewInstanceId, PreviewController } from '../types';
+import type {
+  InspectionPhase,
+  PreviewInstanceId,
+  PreviewController,
+} from '../types';
 import { DiagnosticItem } from './DiagnosticItem';
 
 const SEVERITY_ORDER: DiagnosticSeverity[] = ['error', 'warning', 'info'];
@@ -12,7 +16,10 @@ const SEVERITY_ORDER: DiagnosticSeverity[] = ['error', 'warning', 'info'];
 interface DiagnosticsGroup {
   entryId: PreviewInstanceId;
   deviceLabel: string;
+  phase: InspectionPhase;
   diagnostics: Diagnostic[];
+  reason?: string;
+  errorMessage?: string;
 }
 
 interface InspectionsPanelProps {
@@ -40,22 +47,36 @@ export function InspectionsPanel({
     return entries.map((e) => e.id);
   }, [layoutMode, activeId, compareIds, entries]);
 
-  // Group diagnostics by visible entry, preserving device order.
+  // Group diagnostics by visible entry, preserving device order. The phase is
+  // carried through so the panel can display honest per-device states instead
+  // of implying "No issues" for devices that were never scanned.
   const groups = useMemo<DiagnosticsGroup[]>(() => {
     return visibleIds
-      .map((id) => {
+      .map((id): DiagnosticsGroup | null => {
         const snapshot = inspectionResults[id];
-        if (!snapshot) return null;
         const entry = entries.find((e) => e.id === id);
-        const device = entry ? getDeviceById(entry.deviceId) : undefined;
+        if (!entry) return null;
+        const device = getDeviceById(entry.deviceId);
         const deviceLabel =
           device?.name ??
           (entry?.viewportMode === 'custom' ? 'Custom' : 'Unknown');
+        // A visible device without a snapshot is honest shown as "not scanned".
+        if (!snapshot) {
+          return { entryId: id, deviceLabel, phase: 'idle', diagnostics: [] };
+        }
+        const phase = snapshot.phase;
         return {
           entryId: id,
           deviceLabel,
+          phase,
           diagnostics:
-            snapshot.phase === 'ready' ? [...(snapshot.diagnostics ?? [])] : [],
+            phase === 'ready' ? [...(snapshot.diagnostics ?? [])] : [],
+          ...(snapshot.inaccessibleReason !== undefined
+            ? { reason: snapshot.inaccessibleReason }
+            : {}),
+          ...(snapshot.errorMessage !== undefined
+            ? { errorMessage: snapshot.errorMessage }
+            : {}),
         };
       })
       .filter((g): g is DiagnosticsGroup => g !== null);
@@ -68,8 +89,11 @@ export function InspectionsPanel({
     let infos = 0;
     let total = 0;
     let scanned = 0;
+    let readyCount = 0;
     let hasLargeDom = false;
     let hasInaccessible = false;
+    let hasCrossOrigin = false;
+    let hasUnavailable = false;
     let hasError = false;
     let hasRunning = false;
     let hasIdle = false;
@@ -85,6 +109,7 @@ export function InspectionsPanel({
           hasRunning = true;
           break;
         case 'ready':
+          readyCount++;
           for (const d of snap.diagnostics ?? []) {
             total++;
             if (d.severity === 'error') errors++;
@@ -96,6 +121,11 @@ export function InspectionsPanel({
           break;
         case 'inaccessible':
           hasInaccessible = true;
+          if (snap.inaccessibleReason === 'contentDocument-unavailable') {
+            hasUnavailable = true;
+          } else {
+            hasCrossOrigin = true;
+          }
           break;
         case 'error':
           hasError = true;
@@ -112,8 +142,11 @@ export function InspectionsPanel({
       infos,
       total,
       scanned,
+      readyCount,
       hasLargeDom,
       hasInaccessible,
+      hasCrossOrigin,
+      hasUnavailable,
       hasError,
       hasRunning,
       hasIdle,
@@ -213,8 +246,8 @@ export function InspectionsPanel({
         )}
         {!summary.hasRunning &&
           summary.total === 0 &&
-          visibleIds.length > 0 &&
-          !summary.hasIdle && (
+          summary.readyCount === visibleIds.length &&
+          visibleIds.length > 0 && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {visibleIds.length} device{visibleIds.length !== 1 ? 's' : ''}{' '}
               scanned
@@ -283,8 +316,11 @@ export function InspectionsPanel({
         {/* Inaccessible banner */}
         {summary.hasInaccessible && (
           <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-900/30 dark:text-amber-300">
-            Some pages are cross-origin and cannot be inspected. They will be
-            skipped.
+            {summary.hasCrossOrigin && summary.hasUnavailable
+              ? 'Some pages are cross-origin or could not be accessed by the browser. They will be skipped.'
+              : summary.hasCrossOrigin
+                ? 'Some pages are cross-origin and cannot be inspected. They will be skipped.'
+                : 'Some pages could not be accessed by the browser. They will be skipped.'}
           </div>
         )}
 
@@ -302,11 +338,7 @@ export function InspectionsPanel({
             <h3 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {group.deviceLabel}
             </h3>
-            {group.diagnostics.length === 0 ? (
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                No issues
-              </p>
-            ) : (
+            {group.diagnostics.length > 0 ? (
               <ul
                 className="flex flex-col gap-1"
                 role="list"
@@ -331,6 +363,37 @@ export function InspectionsPanel({
                     />
                   ))}
               </ul>
+            ) : group.phase === 'ready' ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                No issues
+              </p>
+            ) : group.phase === 'error' ? (
+              <div>
+                <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                  Inspection failed
+                </p>
+                {group.errorMessage && (
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {group.errorMessage}
+                  </p>
+                )}
+              </div>
+            ) : group.phase === 'running' ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Scanning…
+              </p>
+            ) : group.phase === 'idle' ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Not scanned
+              </p>
+            ) : group.reason === 'contentDocument-unavailable' ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Cannot be inspected (browser could not access the page)
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Cross-origin — cannot be inspected
+              </p>
             )}
           </div>
         ))}

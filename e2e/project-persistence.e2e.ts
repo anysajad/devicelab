@@ -112,7 +112,7 @@ test.describe('project persistence smoke', () => {
 
     // Should show empty state
     await expect(
-      page.getByText('Add a device above to start previewing')
+      page.getByRole('button', { name: 'Add a device', exact: true })
     ).toBeVisible();
 
     // No iframes

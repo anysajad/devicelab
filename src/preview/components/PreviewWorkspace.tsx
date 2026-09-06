@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePreviewStore } from '../store/usePreviewStore';
 import { clearHighlight } from '../inspection/highlight';
@@ -8,6 +8,23 @@ import { InspectionsPanel } from './InspectionsPanel';
 import { PreviewInstance } from './PreviewInstance';
 import { PreviewThumbnail } from './PreviewThumbnail';
 import { WorkspaceToolbar } from './WorkspaceToolbar';
+
+/**
+ * Preview layout container classes per mode. The instance cards are ALWAYS
+ * mounted (one PreviewInstance per entry) and simply hidden with CSS — the
+ * layout controls only change which cards are visible. This preserves each
+ * instance's controller/iframe across layout switches instead of remounting a
+ * fresh controller (which used to reload the frame and lose zoom state).
+ */
+const GRID_CONTAINER_CLASSES =
+  'grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 overflow-auto p-4';
+const FOCUS_CONTAINER_CLASSES =
+  'flex flex-1 items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-gray-950';
+const COMPARE_CONTAINER_CLASSES =
+  'grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4 content-start overflow-auto p-4';
+
+const CARD_BASE_CLASSES =
+  'flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900';
 
 export function PreviewWorkspace() {
   const entries = usePreviewStore((s) => s.entries);
@@ -21,6 +38,10 @@ export function PreviewWorkspace() {
   const toggleCompareEntry = usePreviewStore((s) => s.toggleCompareEntry);
   const inspectionActive = usePreviewStore((s) => s.inspectionActive);
   const setInspectionActive = usePreviewStore((s) => s.setInspectionActive);
+
+  // Add Device menu visibility, lifted from WorkspaceToolbar so the
+  // empty-state CTA can open the same menu.
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   // Stable controller registry. Updated by each PreviewInstance on mount/unmount
   // so the diagnostics panel can resolve iframes for highlighting without
@@ -85,11 +106,30 @@ export function PreviewWorkspace() {
 
   // Get entries for compare mode
   const compareEntrySet = new Set(compareIds);
-  const compareEntries = entries.filter((e) => compareEntrySet.has(e.id));
+
+  // Determine the container + per-card classes for the current layout.
+  const containerClasses =
+    layoutMode === 'focus'
+      ? FOCUS_CONTAINER_CLASSES
+      : layoutMode === 'compare'
+        ? COMPARE_CONTAINER_CLASSES
+        : GRID_CONTAINER_CLASSES;
+
+  const isCardVisible = (id: string): boolean => {
+    if (layoutMode === 'focus') return id === activeId;
+    if (layoutMode === 'compare') return compareEntrySet.has(id);
+    return true;
+  };
+
+  const hasThumbnailStrip = layoutMode === 'focus' || layoutMode === 'compare';
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <WorkspaceToolbar hasEntries={hasEntries} />
+      <WorkspaceToolbar
+        hasEntries={hasEntries}
+        addMenuOpen={addMenuOpen}
+        onAddMenuOpenChange={setAddMenuOpen}
+      />
 
       {/* Empty state */}
       {!hasEntries && (
@@ -108,7 +148,16 @@ export function PreviewWorkspace() {
                 d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
               />
             </svg>
-            <p className="text-sm">Add a device above to start previewing</p>
+            <p className="text-sm">
+              Start by adding a device below, then set a URL to preview it.
+            </p>
+            <button
+              type="button"
+              onClick={() => setAddMenuOpen(true)}
+              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600"
+            >
+              Add a device
+            </button>
           </div>
         </div>
       )}
@@ -117,13 +166,15 @@ export function PreviewWorkspace() {
       <div className="flex flex-1 overflow-hidden">
         {/* Workspace with previews */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Grid mode */}
-          {hasEntries && layoutMode === 'grid' && (
-            <div className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 overflow-auto p-4">
-              {entries.map((entry) => (
+          {/* Single always-mounted instance list; CSS-visibility drives layout. */}
+          <div className={containerClasses}>
+            {entries.map((entry) =>
+              isCardVisible(entry.id) ? (
                 <div
                   key={entry.id}
-                  className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+                  className={`${CARD_BASE_CLASSES} ${
+                    layoutMode === 'focus' ? 'h-full w-full' : 'min-h-[400px]'
+                  }`}
                 >
                   <PreviewInstance
                     entry={entry}
@@ -132,35 +183,33 @@ export function PreviewWorkspace() {
                     onControllerReady={handleControllerReady}
                   />
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Focus mode */}
-          {hasEntries && layoutMode === 'focus' && (
-            <div className="flex flex-1 flex-col overflow-hidden">
-              {/* Main preview area */}
-              <div className="flex flex-1 items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-gray-950">
-                {activeEntry ? (
-                  <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-                    <PreviewInstance
-                      key={activeEntry.id}
-                      entry={activeEntry}
-                      sharedUrl={sharedUrl}
-                      onRemove={handleRemove}
-                      onControllerReady={handleControllerReady}
-                    />
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-400 dark:text-gray-500">
-                    No preview selected
-                  </div>
-                )}
+              ) : (
+                <div
+                  key={entry.id}
+                  className={`${CARD_BASE_CLASSES} hidden`}
+                  aria-hidden="true"
+                >
+                  <PreviewInstance
+                    entry={entry}
+                    sharedUrl={sharedUrl}
+                    onRemove={handleRemove}
+                    onControllerReady={handleControllerReady}
+                  />
+                </div>
+              )
+            )}
+            {hasEntries && layoutMode === 'focus' && !activeEntry && (
+              <div className="text-sm text-gray-400 dark:text-gray-500">
+                No preview selected
               </div>
+            )}
+          </div>
 
-              {/* Thumbnail strip */}
-              <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
-                {entries.map((entry) => (
+          {/* Thumbnail strip (focus + compare modes) */}
+          {hasEntries && hasThumbnailStrip && (
+            <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+              {entries.map((entry) =>
+                layoutMode === 'focus' ? (
                   <PreviewThumbnail
                     key={entry.id}
                     entry={entry}
@@ -168,36 +217,7 @@ export function PreviewWorkspace() {
                     lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
                     onClick={() => handleThumbnailClick(entry.id)}
                   />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Compare mode */}
-          {hasEntries && layoutMode === 'compare' && (
-            <div className="flex flex-1 flex-col overflow-hidden">
-              {/* Comparison grid — responsive, scrollable */}
-              <div className="flex flex-1 overflow-auto p-4">
-                <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4 content-start">
-                  {compareEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex min-h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-                    >
-                      <PreviewInstance
-                        entry={entry}
-                        sharedUrl={sharedUrl}
-                        onRemove={handleRemove}
-                        onControllerReady={handleControllerReady}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Thumbnail strip — select/deselect for comparison */}
-              <div className="flex gap-2 overflow-x-auto border-t border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
-                {entries.map((entry) => (
+                ) : (
                   <CompareThumbnail
                     key={entry.id}
                     entry={entry}
@@ -205,8 +225,8 @@ export function PreviewWorkspace() {
                     lifecycle={lifecycleStatus[entry.id] ?? 'idle'}
                     onToggle={() => toggleCompareEntry(entry.id)}
                   />
-                ))}
-              </div>
+                )
+              )}
             </div>
           )}
         </div>

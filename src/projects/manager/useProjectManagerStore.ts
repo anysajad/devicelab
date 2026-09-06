@@ -252,8 +252,21 @@ function buildActions(
       // Update existing project
       const existing = repo.get(state.currentId);
       if (!existing.ok) {
-        set({ busy: false, savedData: null, savedName: null });
-        showError('Project no longer exists. Create a new project instead.');
+        // The saved record was deleted (e.g. another tab cleared storage), so
+        // there is nothing to overwrite. Recover by transitioning this
+        // workspace into a NEW project: keep the user's typed name, drop the
+        // dead id reference, and surface the situation. isDirty stays true so
+        // the next Save creates a fresh record instead of silently discarding
+        // the user's work.
+        set({
+          currentId: null,
+          savedData: null,
+          savedName: null,
+          busy: false,
+        });
+        showError(
+          'Project no longer exists. Your changes will be saved as a new project.'
+        );
         recomputeDirty();
         return false;
       }
