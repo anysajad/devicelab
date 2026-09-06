@@ -15,5 +15,6 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./tests/setup.ts",
     css: true,
+    exclude: ["spike/**", "companion/**", "node_modules/**"],
   },
 });

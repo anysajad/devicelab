@@ -1,0 +1,26 @@
+{
+  "name": "@devicelab/companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local companion process for DeviceLab browser-backed previews",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "~5.8.3",
+    "vitest": "^3.1.1"
+  }
+}

@@ -18,7 +18,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "test:spike": "vitest run --config vitest.spike.config.ts",
+    "test:spike:e2e": "playwright test --config spike/playwright.config.ts",
+    "spike:companion": "npx tsx spike/companion/index.ts",
+    "spike:client": "npx vite --config spike/vite.config.ts",
+    "companion:dev": "cd companion && npm run dev",
+    "companion:test": "cd companion && npm test",
+    "companion:build": "cd companion && npm run build"
   },
   "dependencies": {
     "react": "^19.1.0",
