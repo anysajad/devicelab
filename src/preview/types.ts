@@ -3,7 +3,7 @@ import type {
   DeviceOrientation,
   SafeAreaInsets,
 } from '@/devices';
-import type { Diagnostic } from '@/inspection';
+import type { Diagnostic, InspectionInaccessibleReason } from '@/inspection';
 
 export type { DeviceOrientation } from '@/devices';
 
@@ -107,10 +107,6 @@ export interface PreviewEntry {
 /** Phase of a per-preview inspection run. */
 export type InspectionPhase =
   'idle' | 'running' | 'ready' | 'inaccessible' | 'error';
-
-/** Inaccessible reason surfaced to the diagnostics UI. Mirrors the inspection engine. */
-export type InspectionInaccessibleReason =
-  'cross-origin' | 'contentDocument-unavailable';
 
 /**
  * Rendering-safe snapshot of one preview's inspection result.

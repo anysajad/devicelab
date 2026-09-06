@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Diagnostic } from '@/inspection';
-import type { PreviewController } from '../types';
+import type { PreviewBackend } from '../backend';
 import { DiagnosticItem } from '../components/DiagnosticItem';
 import { HIGHLIGHT_CLASS } from '../inspection/highlight';
 
@@ -22,15 +22,24 @@ function createIframeWithDoc(bodyHtml: string): {
   return { iframe, doc };
 }
 
+/** A backend mock that exposes only the abstract inspection surface. */
+function makeBackend(doc: Document | null): PreviewBackend {
+  return {
+    kind: 'iframe',
+    getInspectionAccess: () =>
+      doc ? { status: 'available', document: doc } : { status: 'pending' },
+  } as unknown as PreviewBackend;
+}
+
 function renderItem(
   diagnostic: Diagnostic,
-  controller: PreviewController,
+  backend: PreviewBackend,
   highlightedId: string | null
 ) {
   return render(
     <DiagnosticItem
       diagnostic={diagnostic}
-      controller={controller}
+      backend={backend}
       highlightedId={highlightedId}
       onToggleHighlight={vi.fn()}
     />
@@ -39,8 +48,8 @@ function renderItem(
 
 describe('DiagnosticItem', () => {
   it('renders the touch-target label', () => {
-    const { iframe } = createIframeWithDoc('<button id="b">Tap</button>');
-    const controller = { getIframe: () => iframe } as PreviewController;
+    const { doc } = createIframeWithDoc('<button id="b">Tap</button>');
+    const backend = makeBackend(doc);
     renderItem(
       {
         id: 't1',
@@ -48,15 +57,15 @@ describe('DiagnosticItem', () => {
         severity: 'warning',
         message: 'Small target',
       },
-      controller,
+      backend,
       null
     );
     expect(screen.getByText('Touch target')).toBeInTheDocument();
   });
 
   it('renders a related-element chip when present', () => {
-    const { iframe } = createIframeWithDoc('<div></div>');
-    const controller = { getIframe: () => iframe } as PreviewController;
+    const { doc } = createIframeWithDoc('<div></div>');
+    const backend = makeBackend(doc);
     renderItem(
       {
         id: 'f1',
@@ -66,7 +75,7 @@ describe('DiagnosticItem', () => {
         element: { tagName: 'button', id: 'a', selector: '#a' },
         relatedElement: { tagName: 'button', id: 'b', selector: '#b' },
       },
-      controller,
+      backend,
       null
     );
     expect(screen.getByText('button#a')).toBeInTheDocument();
@@ -74,8 +83,9 @@ describe('DiagnosticItem', () => {
   });
 
   it('not rendered for missing source', () => {
-    const { iframe } = createIframeWithDoc('<div></div>');
-    const controller = { getIframe: () => iframe } as PreviewController;
+    const { doc } = createIframeWithDoc('<div></div>');
+    const backend = makeBackend(doc);
+    // No element ref — the source chip must be omitted.
     renderItem(
       {
         id: 'x',
@@ -83,17 +93,17 @@ describe('DiagnosticItem', () => {
         severity: 'info',
         message: 'No source',
       },
-      controller,
+      backend,
       null
     );
     expect(screen.queryByText(/button#a/)).not.toBeInTheDocument();
   });
 
   it('highlights both the primary and related element on click', async () => {
-    const { iframe, doc } = createIframeWithDoc(
+    const { doc } = createIframeWithDoc(
       '<button id="a">A</button><button id="b">B</button>'
     );
-    const controller = { getIframe: () => iframe } as PreviewController;
+    const backend = makeBackend(doc);
     renderItem(
       {
         id: 'f1',
@@ -103,7 +113,7 @@ describe('DiagnosticItem', () => {
         element: { tagName: 'button', id: 'a', selector: '#a' },
         relatedElement: { tagName: 'button', id: 'b', selector: '#b' },
       },
-      controller,
+      backend,
       null
     );
 
@@ -120,10 +130,10 @@ describe('DiagnosticItem', () => {
   });
 
   it('clears both highlights when un-highlighting', async () => {
-    const { iframe, doc } = createIframeWithDoc(
+    const { doc } = createIframeWithDoc(
       '<button id="a">A</button><button id="b">B</button>'
     );
-    const controller = { getIframe: () => iframe } as PreviewController;
+    const backend = makeBackend(doc);
     renderItem(
       {
         id: 'f1',
@@ -133,7 +143,7 @@ describe('DiagnosticItem', () => {
         element: { tagName: 'button', id: 'a', selector: '#a' },
         relatedElement: { tagName: 'button', id: 'b', selector: '#b' },
       },
-      controller,
+      backend,
       'f1'
     );
 

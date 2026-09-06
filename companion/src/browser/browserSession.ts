@@ -274,6 +274,78 @@ export function createBrowserSession(
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Input methods
+  // ---------------------------------------------------------------------------
+
+  async function mouseMove(x: number, y: number): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.move(x, y);
+  }
+
+  async function mouseDown(x: number, y: number, button: string = 'left'): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.move(x, y);
+    await page.mouse.down({ button: button as 'left' | 'right' | 'middle' });
+  }
+
+  async function mouseUp(x: number, y: number, button: string = 'left'): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.move(x, y);
+    await page.mouse.up({ button: button as 'left' | 'right' | 'middle' });
+  }
+
+  async function mouseClick(x: number, y: number, button: string = 'left', clickCount: number = 1): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.click(x, y, { button: button as 'left' | 'right' | 'middle', clickCount });
+  }
+
+  async function mouseDoubleClick(x: number, y: number, button: string = 'left'): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.dblclick(x, y, { button: button as 'left' | 'right' | 'middle' });
+  }
+
+  async function wheel(deltaX: number, deltaY: number): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.wheel(deltaX, deltaY);
+  }
+
+  async function keyDown(key: string): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.keyboard.down(key);
+  }
+
+  async function keyUp(key: string): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.keyboard.up(key);
+  }
+
+  async function type(text: string, delay?: number): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.keyboard.type(text, { delay });
+  }
+
+  async function touchStart(x: number, y: number): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    try {
+      const touchscreen = page.touchscreen;
+      if (touchscreen) {
+        await touchscreen.tap(x, y);
+      }
+    } catch {
+      // Touch not supported or failed - continue silently
+    }
+  }
+
+  async function touchMove(x: number, y: number): Promise<void> {
+    if (!page || lifecycle !== 'ready') return;
+    await page.mouse.move(x, y);
+  }
+
+  async function touchEnd(): Promise<void> {
+    // Playwright doesn't have a direct touchEnd API
+  }
+
   return {
     id: config.id,
     init,
@@ -284,5 +356,17 @@ export function createBrowserSession(
     subscribe,
     startFrameCapture,
     stopFrameCapture,
+    mouseMove,
+    mouseDown,
+    mouseUp,
+    mouseClick,
+    mouseDoubleClick,
+    wheel,
+    keyDown,
+    keyUp,
+    type,
+    touchStart,
+    touchMove,
+    touchEnd,
   };
 }

@@ -27,6 +27,13 @@ export {
   ZOOM_STEP,
 } from './previewUtils';
 export { createPreviewController } from './previewEngine';
+export type {
+  PreviewBackend,
+  PreviewBackendKind,
+  PreviewInspectionAccess,
+  PreviewSurface,
+} from './backend';
+export { createIframePreviewBackend } from './backend';
 export { usePreview } from './usePreview';
 export type { UsePreviewReturn } from './usePreview';
 export { usePreviewStore } from './store/usePreviewStore';

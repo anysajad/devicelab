@@ -1,6 +1,6 @@
 # Local Companion
 
-**Status:** Phase 2B-2 (Live Screenshot/Canvas Data Plane)
+**Status:** Phase 2B-3 (Interaction/Input Plane)
 
 ## Why the companion exists
 
@@ -13,6 +13,7 @@ DeviceLab's current iframe-based preview cannot render sites that refuse to be e
 │   DeviceLab Web UI      │ ◄─────────────────────────► │   Companion Process      │
 │   (BrowserPreviewBackend)│     ws://127.0.0.1:PORT      │   (Node.js + Playwright) │
 │   (canvas surface)      │                              │   (screenshot capture)   │
+│   (input handling)      │                              │   (input forwarding)     │
 └─────────────────────────┘                              └────────────┬─────────────┘
                                                                      │
                                                             Playwright API
@@ -26,13 +27,46 @@ DeviceLab's current iframe-based preview cannot render sites that refuse to be e
                                                             └──────────────────┘
 ```
 
-## Process lifecycle
+## Input Architecture
 
-1. **Start:** Companion starts as a separate Node.js process
-2. **Bind:** Listens on loopback only (`127.0.0.1`)
-3. **Token:** Generates a random authentication token
-4. **Ready:** Accepts WebSocket connections
-5. **Shutdown:** Graceful shutdown on SIGINT/SIGTERM
+### Coordinate System
+
+Multiple coordinate spaces are involved:
+1. Browser viewport CSS pixels (Playwright page coordinates)
+2. Canvas internal pixel coordinates
+3. Canvas displayed CSS dimensions
+4. DeviceLab preview zoom
+5. Pointer event client coordinates
+
+The companion/Playwright page receives coordinates in **browser viewport CSS pixels**.
+
+### Input Pipeline
+
+```
+Canvas pointer event
+  → clientToViewport conversion
+  → BrowserPreviewBackend.sendPointerInput()
+  → BrowserCompanionClient.request()
+  → WebSocket JSON message
+  → Companion server
+  → BrowserSession method
+  → Playwright API call
+  → Real page interaction
+```
+
+### Supported Input Types
+
+- **Mouse:** move, down, up, click, double-click
+- **Wheel:** vertical/horizontal scroll
+- **Keyboard:** keyDown, keyUp, text typing
+- **Touch:** start, move, end (basic support)
+
+### Focus Management
+
+- Canvas receives keyboard input when focused
+- Clicking canvas focuses it
+- No global keyboard capture from DeviceLab UI
+- URL input, device selector, and other controls unaffected
 
 ## WebSocket protocol
 
@@ -292,9 +326,59 @@ Two simultaneous browser sessions tested:
 
 ### Intentionally NOT Implemented Yet
 
-- ❌ Mouse/keyboard input (Phase 2B-3)
-- ❌ Wheel/scroll forwarding (Phase 2B-3)
-- ❌ Touch input (Phase 2B-3)
+- ❌ DPR emulation
+- ❌ Authentication profiles/storageState
+- ❌ Multi-preview optimization
+- ❌ Frame rate adaptation
+- ❌ Reconnection/retry UX
+
+## Phase 2B-3: Interaction/Input Plane
+
+Phase 2B-3 adds real user interaction:
+
+### Input Commands
+
+Extended protocol with typed input commands:
+- `session.mouseMove` - Move mouse to position
+- `session.mouseDown` - Press mouse button
+- `session.mouseUp` - Release mouse button
+- `session.mouseClick` - Click at position
+- `session.mouseDoubleClick` - Double-click
+- `session.wheel` - Scroll wheel
+- `session.keyDown` - Press key
+- `session.keyUp` - Release key
+- `session.type` - Type text
+- `session.touchStart` - Touch start
+- `session.touchMove` - Touch move
+- `session.touchEnd` - Touch end
+
+### Coordinate Conversion
+
+The `coordinateConversion.ts` utility handles mapping between:
+- Canvas display coordinates
+- Browser viewport CSS pixels
+- Playwright page coordinates
+
+### Canvas Surface
+
+- Real HTMLCanvasElement handles pointer/wheel/keyboard events
+- Events converted to backend-level input intent
+- Backend forwards to companion via typed commands
+- Companion maps to Playwright API calls
+
+### Current Capabilities
+
+- ✅ Mouse move/click/double-click
+- ✅ Wheel scroll
+- ✅ Keyboard input
+- ✅ Text typing
+- ✅ Touch (basic)
+- ✅ Focus management
+- ✅ Coordinate conversion
+- ✅ Input validation
+
+### Intentionally NOT Implemented Yet
+
 - ❌ DPR emulation
 - ❌ Authentication profiles/storageState
 - ❌ Multi-preview optimization
@@ -322,3 +406,39 @@ Two simultaneous browser sessions tested:
   }
 }
 ```
+
+## Test Counts
+
+- **Existing tests:** 886 passed (Phase 2B-1/2B-2)
+- **Companion tests:** 82 passed (Phase 2B-3)
+- **Total:** 968 tests passed
+
+## Validation Results
+
+- ✅ TypeScript typecheck passes
+- ✅ ESLint passes (0 errors)
+- ✅ Prettier formatting passes
+- ✅ Production build succeeds
+- ✅ All unit tests pass (886)
+- ✅ All companion tests pass (82)
+
+## Remaining Limitations
+
+- ❌ DPR emulation (deferred to future phase)
+- ❌ Authentication profiles/storageState (deferred to future phase)
+- ❌ Multi-preview optimization (deferred to future phase)
+- ❌ Frame rate adaptation (deferred to future phase)
+- ❌ Reconnection/retry UX (deferred to future phase)
+- ❌ Hosted companion (deferred to future phase)
+
+## Recommended Next Phase
+
+**Phase 2C: Production Integration**
+
+Integrate BrowserPreviewBackend into the DeviceLab workspace:
+- Add `backendMode` selector to PreviewEntry
+- Create "Connect Companion" dialog
+- Wire BrowserPreviewBackend into PreviewWorkspace
+- Add visual frame delivery with canvas rendering
+- Integrate input handling into preview instances
+- Test with real websites that block iframe embedding

@@ -24,18 +24,16 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 
 describe('InspectionsPanel', () => {
   const onClose = vi.fn();
-  const getController = vi.fn();
+  const getBackend = vi.fn();
 
   beforeEach(() => {
     usePreviewStore.getState().reset();
     onClose.mockClear();
-    getController.mockReset();
+    getBackend.mockReset();
   });
 
   it('renders empty state when no inspections have run', () => {
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(
       screen.getByText(/Click Inspect or Rescan to check for issues/)
     ).toBeInTheDocument();
@@ -50,9 +48,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 20,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('No issues found')).toBeInTheDocument();
     expect(screen.getByText('20 elements scanned')).toBeInTheDocument();
   });
@@ -85,9 +81,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 10,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('1 error')).toBeInTheDocument();
     expect(screen.getByText('1 warning')).toBeInTheDocument();
     expect(screen.getByText('1 info')).toBeInTheDocument();
@@ -109,9 +103,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 5,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('iPhone 15')).toBeInTheDocument();
   });
 
@@ -122,9 +114,7 @@ describe('InspectionsPanel', () => {
       inaccessibleReason: 'cross-origin',
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(
       screen.getByText(/cross-origin and cannot be inspected/)
     ).toBeInTheDocument();
@@ -134,16 +124,12 @@ describe('InspectionsPanel', () => {
     const id = usePreviewStore.getState().addEntry('iphone-15');
     usePreviewStore.getState().setInspectionResult(id, { phase: 'running' });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('Scanning...')).toBeInTheDocument();
   });
 
   it('calls onClose when close button is clicked', async () => {
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     await userEvent.click(screen.getByLabelText('Close inspection panel'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -153,9 +139,7 @@ describe('InspectionsPanel', () => {
       usePreviewStore.getState(),
       'requestInspection'
     );
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     await userEvent.click(screen.getByLabelText('Rescan'));
     expect(requestInspection).toHaveBeenCalledTimes(1);
     requestInspection.mockRestore();
@@ -193,9 +177,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 5,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('Active issue')).toBeInTheDocument();
     expect(screen.queryByText('Inactive issue')).not.toBeInTheDocument();
   });
@@ -232,9 +214,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 5,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
     expect(screen.getByText('Compare issue')).toBeInTheDocument();
     expect(screen.queryByText('Non-selected issue')).not.toBeInTheDocument();
   });
@@ -243,9 +223,7 @@ describe('InspectionsPanel', () => {
     const id = usePreviewStore.getState().addEntry('iphone-15');
     usePreviewStore.getState().setInspectionResult(id, { phase: 'idle' });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     expect(screen.getByText('Not scanned')).toBeInTheDocument();
     expect(screen.queryByText('No issues found')).not.toBeInTheDocument();
@@ -260,9 +238,7 @@ describe('InspectionsPanel', () => {
       inaccessibleReason: 'cross-origin',
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     expect(
       screen.getByText(/Some pages are cross-origin and cannot be inspected/)
@@ -280,9 +256,7 @@ describe('InspectionsPanel', () => {
       inaccessibleReason: 'contentDocument-unavailable',
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     expect(
       screen.getByText(/browser could not access the page/)
@@ -297,9 +271,7 @@ describe('InspectionsPanel', () => {
       errorMessage: 'Inspection crashed',
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     expect(screen.getByText('Inspection failed')).toBeInTheDocument();
     expect(screen.getByText('Inspection crashed')).toBeInTheDocument();
@@ -317,9 +289,7 @@ describe('InspectionsPanel', () => {
     });
     // id2 has no result yet (phase idle).
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     // Not all visible devices are scanned => no "N devices scanned" badge and
     // no "No issues found" claim (the unscanned device is shown honestly).
@@ -340,9 +310,7 @@ describe('InspectionsPanel', () => {
       elementsScanned: 3,
     });
 
-    render(
-      <InspectionsPanel getController={getController} onClose={onClose} />
-    );
+    render(<InspectionsPanel getBackend={getBackend} onClose={onClose} />);
 
     expect(screen.getByText('1 device scanned')).toBeInTheDocument();
   });

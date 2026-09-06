@@ -29,7 +29,7 @@ describe('usePreview', () => {
     expect(result.current.state.lifecycle).toBe('idle');
   });
 
-  it('provides a controller with expected API', () => {
+  it('provides a backend satisfying the abstract contract', () => {
     const { result } = renderHook(() => usePreview());
     expect(typeof result.current.load).toBe('function');
     expect(typeof result.current.setDevice).toBe('function');
@@ -39,7 +39,16 @@ describe('usePreview', () => {
     expect(typeof result.current.zoomIn).toBe('function');
     expect(typeof result.current.zoomOut).toBe('function');
     expect(typeof result.current.fitToContainer).toBe('function');
-    expect(result.current.controller).toBeDefined();
+    expect(result.current.backend).toBeDefined();
+    // The hook returns the abstract backend surface — the iframe adapter is
+    // behind the contract, not exposed to the UI.
+    expect(result.current.backend.kind).toBe('iframe');
+    expect(typeof result.current.backend.getSurface).toBe('function');
+    expect(typeof result.current.backend.getInspectionAccess).toBe('function');
+    expect(typeof result.current.backend.getScreenshotSource).toBe('function');
+    expect(typeof result.current.backend.subscribe).toBe('function');
+    expect(result.current.backend.getSurface()).toBeNull();
+    expect(result.current.backend.getInspectionAccess().status).toBe('pending');
   });
 
   it('load() transitions to loading state', () => {

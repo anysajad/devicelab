@@ -254,7 +254,10 @@ describe('CompanionClient', () => {
             ws.send(
               JSON.stringify({
                 id: msg.id,
-                result: { sessionId: 'test-session', viewport: { width: 375, height: 667 } },
+                result: {
+                  sessionId: 'test-session',
+                  viewport: { width: 375, height: 667 },
+                },
               })
             );
             // Send lifecycle event

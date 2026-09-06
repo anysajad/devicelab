@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 
-import { inspectIframe } from '@/inspection';
+import { inspectDocument } from '@/inspection';
 import type { InspectionResult } from '@/inspection';
 import { usePreviewStore } from '../store/usePreviewStore';
-import type { PreviewController, PreviewInstanceId } from '../types';
+import type { PreviewBackend } from '../backend';
+import type { PreviewInstanceId } from '../types';
 
 /**
  * Run the inspection engine for one preview entry and store the result.
@@ -11,17 +12,20 @@ import type { PreviewController, PreviewInstanceId } from '../types';
  * The workspace owns a single "Inspect" toggle. When active, every mounted
  * PreviewInstance (i.e. the currently visible set — grid shows all, focus
  * shows the active entry, compare shows the selected entries) reacts to the
- * shared `inspectionRequest` token and inspects its own iframe. Results are
+ * shared `inspectionRequest` token and inspects its own preview. Results are
  * keyed by PreviewInstanceId and stored in Zustand so the diagnostics panel
  * (a sibling) can read them without prop drilling.
  *
- * Inspection is fully decoupled from PreviewEngine state: this hook only reads
- * the controller to obtain the iframe + viewport; it never mutates it. The
- * engine's `inspectIframe` is side-effect-free on the preview.
+ * Inspection is fully decoupled from PreviewEngine state: this hook only asks
+ * the backend for inspection access + viewport; it never mutates it. The
+ * engine's `inspectDocument` is side-effect-free on the preview. The backend's
+ * `getInspectionAccess()` keeps this backend-neutral — a browser-backed
+ * backend can signal the same pending/inaccessible/available states without
+ * exposing iframe specifics.
  */
 export function usePreviewInspection(
   entryId: PreviewInstanceId,
-  controller: PreviewController
+  backend: PreviewBackend
 ): void {
   const inspectionActive = usePreviewStore((s) => s.inspectionActive);
   const inspectionRequest = usePreviewStore((s) => s.inspectionRequest);
@@ -30,10 +34,21 @@ export function usePreviewInspection(
   useEffect(() => {
     if (!inspectionActive) return;
 
-    const iframe = controller.getIframe();
-    if (!iframe) {
-      // No iframe yet (not loaded). Nothing meaningful to inspect.
+    const access = backend.getInspectionAccess();
+
+    if (access.status === 'pending') {
+      // No surface yet or the document is not ready. Nothing meaningful to
+      // inspect yet.
       setInspectionResult(entryId, { phase: 'idle' });
+      return;
+    }
+
+    if (access.status === 'inaccessible') {
+      setInspectionResult(entryId, {
+        phase: 'inaccessible',
+        inspectedAt: Date.now(),
+        inaccessibleReason: access.reason,
+      });
       return;
     }
 
@@ -41,9 +56,9 @@ export function usePreviewInspection(
 
     let result: InspectionResult;
     try {
-      result = inspectIframe(iframe, {
-        width: controller.getState().viewport.width,
-        height: controller.getState().viewport.height,
+      result = inspectDocument(access.document, {
+        width: backend.getState().viewport.width,
+        height: backend.getState().viewport.height,
       });
     } catch (err) {
       setInspectionResult(entryId, {
@@ -90,7 +105,7 @@ export function usePreviewInspection(
     inspectionActive,
     inspectionRequest,
     entryId,
-    controller,
+    backend,
     setInspectionResult,
   ]);
 }

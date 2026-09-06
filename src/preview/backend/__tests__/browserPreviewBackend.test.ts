@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocketServer } from 'ws';
-import {
-  createBrowserPreviewBackend,
-} from '../browserPreviewBackend';
+import { createBrowserPreviewBackend } from '../browserPreviewBackend';
 import type { PreviewBackend } from '../types';
 
 describe('BrowserPreviewBackend', () => {
@@ -228,7 +226,10 @@ describe('BrowserPreviewBackend', () => {
             ws.send(
               JSON.stringify({
                 id: msg.id,
-                result: { sessionId: 'test-session', viewport: { width: 375, height: 667 } },
+                result: {
+                  sessionId: 'test-session',
+                  viewport: { width: 375, height: 667 },
+                },
               })
             );
           } else if (msg.method === 'session.load') {
@@ -451,37 +452,37 @@ describe('BrowserPreviewBackend', () => {
   });
 
   describe('connection failure', () => {
-  it('handles connection errors', async () => {
-    backend = createBrowserPreviewBackend({
-      endpoint: 'ws://127.0.0.1:99999/ws',
-      token: 'test-token',
-    });
-
-    await new Promise<void>((resolve) => {
-      backend.subscribe((state) => {
-        if (state.lifecycle === 'error') {
-          resolve();
-        }
+    it('handles connection errors', async () => {
+      backend = createBrowserPreviewBackend({
+        endpoint: 'ws://127.0.0.1:99999/ws',
+        token: 'test-token',
       });
 
-      backend.load({
-        url: 'https://example.com',
-        device: {
-          id: 'iphone-15',
-          name: 'iPhone 15',
-          manufacturer: 'Apple',
-          category: 'phone',
-          viewport: { width: 393, height: 852 },
-          devicePixelRatio: 3,
-          safeArea: { top: 59, right: 0, bottom: 34, left: 0 },
-          orientations: ['portrait', 'landscape'],
-        },
-        orientation: 'portrait',
-      });
-    });
+      await new Promise<void>((resolve) => {
+        backend.subscribe((state) => {
+          if (state.lifecycle === 'error') {
+            resolve();
+          }
+        });
 
-    expect(backend.getState().lifecycle).toBe('error');
-    expect(backend.getState().error).toContain('Failed to create session');
-  });
+        backend.load({
+          url: 'https://example.com',
+          device: {
+            id: 'iphone-15',
+            name: 'iPhone 15',
+            manufacturer: 'Apple',
+            category: 'phone',
+            viewport: { width: 393, height: 852 },
+            devicePixelRatio: 3,
+            safeArea: { top: 59, right: 0, bottom: 34, left: 0 },
+            orientations: ['portrait', 'landscape'],
+          },
+          orientation: 'portrait',
+        });
+      });
+
+      expect(backend.getState().lifecycle).toBe('error');
+      expect(backend.getState().error).toContain('Failed to create session');
+    });
   });
 });

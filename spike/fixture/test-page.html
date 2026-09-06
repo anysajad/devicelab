@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spike Test Page</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      overflow-x: hidden;
+    }
+    #status-bar {
+      position: sticky;
+      top: 0;
+      background: #16213e;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      border-bottom: 1px solid #0f3460;
+      z-index: 10;
+      display: flex;
+      gap: 12px;
+    }
+    #status-bar span { color: #53c4f7; }
+    #scroll-container {
+      height: calc(100vh - 32px);
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+    .section {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      border-bottom: 1px solid #0f3460;
+    }
+    .section:nth-child(odd) { background: #1a1a2e; }
+    .section:nth-child(even) { background: #16213e; }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 16px;
+      color: #53c4f7;
+    }
+    #counter-display {
+      font-size: 64px;
+      font-weight: bold;
+      font-family: monospace;
+      color: #e94560;
+      margin: 16px 0;
+    }
+    #click-btn {
+      padding: 12px 32px;
+      font-size: 16px;
+      border: 2px solid #53c4f7;
+      background: transparent;
+      color: #53c4f7;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    #click-btn:hover { background: #53c4f7; color: #1a1a2e; }
+    #click-btn:active { transform: scale(0.97); }
+    .scroll-content {
+      max-width: 300px;
+      line-height: 1.8;
+      color: #888;
+      font-size: 14px;
+    }
+    .coord-marker {
+      font-family: monospace;
+      font-size: 11px;
+      color: #666;
+      position: absolute;
+      pointer-events: none;
+    }
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.05;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-bar">
+    <div>counter: <span id="counter-val">0</span></div>
+    <div>clicks: <span id="click-count">0</span></div>
+    <div>scroll: <span id="scroll-pos">0</span></div>
+  </div>
+  <div id="scroll-container">
+    <div class="section" id="section-top">
+      <div class="grid-lines"></div>
+      <h1>Spike Test Page</h1>
+      <p style="color:#888;margin-bottom:16px">Button click and counter tracking</p>
+      <div id="counter-display">0</div>
+      <button id="click-btn" aria-label="Click counter button">Click Me</button>
+      <div class="scroll-content" style="margin-top:24px">
+        <p>Each click increments the counter. The counter and click count are shown in the sticky status bar and in this section. Scroll down to see more content.</p>
+      </div>
+    </div>
+    <div class="section" id="section-scroll">
+      <h1>Scroll Test</h1>
+      <p style="color:#888;max-width:300px;text-align:center;line-height:1.8">
+        Scroll position is tracked in the status bar above.
+        Use mouse wheel or scroll gesture. The page has enough content to scroll.
+      </p>
+      <div class="scroll-content" style="margin-top:24px">
+        <p>Lines of filler content to create scrollable area:</p>
+        <p>1. Alpha testing reveals layout issues across viewports.</p>
+        <p>2. Beta feedback drives polish and accessibility fixes.</p>
+        <p>3. Responsive design requires testing on many widths.</p>
+        <p>4. DeviceLab helps verify layouts across device presets.</p>
+        <p>5. Viewport constraints affect text wrapping and overflow.</p>
+        <p>6. Touch targets must meet minimum 44x44px requirements.</p>
+        <p>7. Safe area insets matter on notched mobile displays.</p>
+        <p>8. Font scaling affects line breaks and content reflow.</p>
+        <p>9. Orientation changes swap width and height dimensions.</p>
+        <p>10. Container queries enable component-level responsive logic.</p>
+        <p>11. The viewport meta tag controls initial scale behavior.</p>
+        <p>12. CSS clamp() enables fluid typography without media queries.</p>
+        <p>13. Grid layouts auto-adjust column count based on space.</p>
+        <p>14. Flexbox wrap mode enables responsive card arrangements.</p>
+        <p>15. Fixed positioning creates stacking context requirements.</p>
+        <p>16. The overflow property controls content clipping behavior.</p>
+        <p>17. Media queries target specific device capabilities.</p>
+        <p>18. Container queries provide component-level breakpoints.</p>
+        <p>19. Aspect ratio CSS property preserves media proportions.</p>
+        <p>20. CSS layers control specificity in large codebases.</p>
+        <p>21. The has() selector enables parent-based styling.</p>
+        <p>22. Nesting syntax reduces CSS selector verbosity.</p>
+        <p>23. Scroll-driven animations improve perceived performance.</p>
+        <p>24. View transitions API enables smooth page transitions.</p>
+        <p>25. Popover API provides accessible overlay primitives.</p>
+      </div>
+    </div>
+    <div class="section" id="section-coord">
+      <h1>Coordinate Test</h1>
+      <p style="color:#888;max-width:300px;text-align:center;line-height:1.8">
+        Click anywhere on this section. The status bar shows the click coordinates. The grid overlay helps verify coordinate mapping.
+      </p>
+      <div id="coord-display" style="font-family:monospace;font-size:13px;color:#e94560;margin-top:16px">
+        x: --, y: --
+      </div>
+    </div>
+    <div class="section" id="section-end">
+      <h1>End of Test Page</h1>
+      <p style="color:#888">You have scrolled through the entire test fixture.</p>
+    </div>
+  </div>
+  <script>
+    let counter = 0;
+    let clickCount = 0;
+    const counterDisplay = document.getElementById('counter-display');
+    const counterVal = document.getElementById('counter-val');
+    const clickCountEl = document.getElementById('click-count');
+    const scrollPosEl = document.getElementById('scroll-pos');
+    const coordDisplay = document.getElementById('coord-display');
+    const scrollContainer = document.getElementById('scroll-container');
+
+    document.getElementById('click-btn').addEventListener('click', function(e) {
+      counter++;
+      clickCount++;
+      counterDisplay.textContent = counter;
+      counterVal.textContent = counter;
+      clickCountEl.textContent = clickCount;
+    });
+
+    scrollContainer.addEventListener('scroll', function() {
+      scrollPosEl.textContent = Math.round(scrollContainer.scrollTop);
+    });
+
+    document.getElementById('section-coord').addEventListener('click', function(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = Math.round(e.clientX - rect.left);
+      const y = Math.round(e.clientY - rect.top);
+      coordDisplay.textContent = 'x: ' + x + ', y: ' + y;
+    });
+  </script>
+</body>
+</html>

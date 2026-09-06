@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { usePreviewStore } from '../store/usePreviewStore';
 import { clearHighlight } from '../inspection/highlight';
-import type { PreviewController, PreviewInstanceId } from '../types';
+import type { PreviewBackend } from '../backend';
+import type { PreviewInstanceId } from '../types';
 import { CompareThumbnail } from './CompareThumbnail';
 import { InspectionsPanel } from './InspectionsPanel';
 import { PreviewInstance } from './PreviewInstance';
@@ -43,32 +44,30 @@ export function PreviewWorkspace() {
   // empty-state CTA can open the same menu.
   const [addMenuOpen, setAddMenuOpen] = useState(false);
 
-  // Stable controller registry. Updated by each PreviewInstance on mount/unmount
-  // so the diagnostics panel can resolve iframes for highlighting without
-  // prop drilling through the workspace.
-  const controllersRef = useRef<Map<PreviewInstanceId, PreviewController>>(
-    new Map()
-  );
+  // Stable backend registry. Updated by each PreviewInstance on mount/unmount
+  // so the diagnostics panel can resolve inspection documents for highlighting
+  // without prop drilling through the workspace.
+  const backendsRef = useRef<Map<PreviewInstanceId, PreviewBackend>>(new Map());
 
-  const handleControllerReady = useCallback(
-    (id: PreviewInstanceId, ctrl: PreviewController | null) => {
-      if (ctrl) controllersRef.current.set(id, ctrl);
-      else controllersRef.current.delete(id);
+  const handleBackendReady = useCallback(
+    (id: PreviewInstanceId, backend: PreviewBackend | null) => {
+      if (backend) backendsRef.current.set(id, backend);
+      else backendsRef.current.delete(id);
     },
     []
   );
 
-  const getController = useCallback(
-    (id: PreviewInstanceId) => controllersRef.current.get(id),
+  const getBackend = useCallback(
+    (id: PreviewInstanceId) => backendsRef.current.get(id),
     []
   );
 
   const handleClosePanel = useCallback(() => {
-    // Clear any active highlights in the preview iframes.
+    // Clear any active highlights in the preview documents.
     const entriesSnapshot = usePreviewStore.getState().entries;
     for (const entry of entriesSnapshot) {
-      const controller = controllersRef.current.get(entry.id);
-      const doc = controller?.getIframe()?.contentDocument;
+      const access = backendsRef.current.get(entry.id)?.getInspectionAccess();
+      const doc = access?.status === 'available' ? access.document : null;
       if (doc) clearHighlight(doc);
     }
     setInspectionActive(false);
@@ -180,7 +179,7 @@ export function PreviewWorkspace() {
                     entry={entry}
                     sharedUrl={sharedUrl}
                     onRemove={handleRemove}
-                    onControllerReady={handleControllerReady}
+                    onBackendReady={handleBackendReady}
                   />
                 </div>
               ) : (
@@ -193,7 +192,7 @@ export function PreviewWorkspace() {
                     entry={entry}
                     sharedUrl={sharedUrl}
                     onRemove={handleRemove}
-                    onControllerReady={handleControllerReady}
+                    onBackendReady={handleBackendReady}
                   />
                 </div>
               )
@@ -234,7 +233,7 @@ export function PreviewWorkspace() {
         {/* Diagnostics panel (right side) */}
         {inspectionActive && (
           <InspectionsPanel
-            getController={getController}
+            getBackend={getBackend}
             onClose={handleClosePanel}
           />
         )}

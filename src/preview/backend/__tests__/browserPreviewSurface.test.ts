@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createBrowserPreviewSurface, type BrowserPreviewSurface } from '../browserPreviewSurface';
+import {
+  createBrowserPreviewSurface,
+  type BrowserPreviewSurface,
+} from '../browserPreviewSurface';
 
 describe('BrowserPreviewSurface', () => {
   let container: HTMLDivElement;

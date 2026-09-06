@@ -271,6 +271,389 @@ export function createCompanionServer(
         return createSuccessResponse(msg.id, state);
       }
 
+      // -----------------------------------------------------------------------
+      // Input commands (Phase 2B-3)
+      // -----------------------------------------------------------------------
+
+      case 'session.mouseMove': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.mouseMove(params.x, params.y);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to move mouse: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.mouseDown': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+          button?: string;
+          clickCount?: number;
+          modifiers?: Record<string, boolean>;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.mouseDown(
+            params.x,
+            params.y,
+            params.button as 'left' | 'right' | 'middle',
+            params.clickCount,
+            params.modifiers
+          );
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to press mouse: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.mouseUp': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+          button?: string;
+          clickCount?: number;
+          modifiers?: Record<string, boolean>;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.mouseUp(
+            params.x,
+            params.y,
+            params.button as 'left' | 'right' | 'middle',
+            params.clickCount,
+            params.modifiers
+          );
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to release mouse: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.mouseClick': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+          button?: string;
+          clickCount?: number;
+          modifiers?: Record<string, boolean>;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.mouseClick(
+            params.x,
+            params.y,
+            params.button as 'left' | 'right' | 'middle',
+            params.clickCount,
+            params.modifiers
+          );
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to click: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.mouseDoubleClick': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+          button?: string;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.mouseDoubleClick(
+            params.x,
+            params.y,
+            params.button as 'left' | 'right' | 'middle'
+          );
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to double click: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.wheel': {
+        const params = msg.params as {
+          sessionId: string;
+          deltaX: number;
+          deltaY: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.wheel(params.deltaX, params.deltaY);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to scroll: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.keyDown': {
+        const params = msg.params as {
+          sessionId: string;
+          key: string;
+          code?: string;
+          modifiers?: Record<string, boolean>;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.keyDown(params.key, params.code, params.modifiers);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to press key: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.keyUp': {
+        const params = msg.params as {
+          sessionId: string;
+          key: string;
+          code?: string;
+          modifiers?: Record<string, boolean>;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.keyUp(params.key, params.code, params.modifiers);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to release key: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.type': {
+        const params = msg.params as {
+          sessionId: string;
+          text: string;
+          delay?: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        // Validate text length
+        if (params.text.length > 10000) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            'Text too long (max 10000 characters)'
+          );
+        }
+
+        try {
+          await session.type(params.text, params.delay);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to type: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.touchStart': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.touchStart(params.x, params.y);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to start touch: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.touchMove': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.touchMove(params.x, params.y);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to move touch: ${String(err)}`
+          );
+        }
+      }
+
+      case 'session.touchEnd': {
+        const params = msg.params as {
+          sessionId: string;
+          x: number;
+          y: number;
+        };
+        const session = sessions.get(params.sessionId);
+
+        if (!session) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.SESSION_NOT_FOUND,
+            `Session not found: ${params.sessionId}`
+          );
+        }
+
+        try {
+          await session.touchEnd(params.x, params.y);
+          return createSuccessResponse(msg.id, { ok: true });
+        } catch (err) {
+          return createErrorResponse(
+            msg.id,
+            ErrorCode.INVALID_PARAMS,
+            `Failed to end touch: ${String(err)}`
+          );
+        }
+      }
+
       case 'shutdown': {
         // Broadcast shutdown event
         transport?.broadcast({

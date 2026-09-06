@@ -28,13 +28,12 @@ import type {
 import type { DeviceDefinition } from '@/devices';
 import type { ScreenshotSource } from '@/screenshot';
 import type { SafeAreaInsets } from '@/devices';
-import {
-  createCompanionClient,
-} from './browserCompanionClient';
+import { createCompanionClient } from './browserCompanionClient';
 import type { ClientEvent, FrameData } from './browserCompanionClient';
 import {
   createBrowserPreviewSurface,
   type BrowserPreviewSurface,
+  type SurfaceInputEvent,
 } from './browserPreviewSurface';
 
 // ---------------------------------------------------------------------------
@@ -219,7 +218,10 @@ export function createBrowserPreviewBackend(
     frameTimestamps.push(now);
     // Keep only timestamps from the last second
     const oneSecAgo = now - 1000;
-    while (frameTimestamps.length > 0 && (frameTimestamps[0] ?? 0) < oneSecAgo) {
+    while (
+      frameTimestamps.length > 0 &&
+      (frameTimestamps[0] ?? 0) < oneSecAgo
+    ) {
       frameTimestamps.shift();
     }
     frameMetrics.fps = frameTimestamps.length;
@@ -236,11 +238,7 @@ export function createBrowserPreviewBackend(
     updateFrameMetrics(payloadBytes);
 
     // Draw frame to surface
-    surface?.drawFrame(
-      frameData.payload,
-      frameData.width,
-      frameData.height
-    );
+    surface?.drawFrame(frameData.payload, frameData.width, frameData.height);
   }
 
   // ---------------------------------------------------------------------------
@@ -312,9 +310,7 @@ export function createBrowserPreviewBackend(
   // Session management
   // ---------------------------------------------------------------------------
 
-  async function initializeSession(
-    viewport: ComputedViewport
-  ): Promise<void> {
+  async function initializeSession(viewport: ComputedViewport): Promise<void> {
     try {
       await client.connect();
 
@@ -390,6 +386,34 @@ export function createBrowserPreviewBackend(
   // Surface management
   // ---------------------------------------------------------------------------
 
+  function handleSurfaceInput(event: SurfaceInputEvent): void {
+    if (destroyed || !sessionId) return;
+
+    switch (event.type) {
+      case 'move':
+      case 'down':
+      case 'up':
+      case 'click':
+      case 'doubleClick':
+        extendedBackend.sendPointerInput(
+          event.type,
+          event.x,
+          event.y,
+          event.button,
+          event.clickCount
+        );
+        break;
+      case 'wheel':
+        extendedBackend.sendWheelInput(event.deltaX, event.deltaY);
+        break;
+      case 'keyDown':
+      case 'keyUp':
+      case 'type':
+        extendedBackend.sendKeyboardInput(event.type, event.key, event.text);
+        break;
+    }
+  }
+
   function ensureSurface(): void {
     if (!container || surface) return;
 
@@ -397,6 +421,7 @@ export function createBrowserPreviewBackend(
       container,
       width: state.viewport.width,
       height: state.viewport.height,
+      onInput: handleSurfaceInput,
     });
   }
 
@@ -465,9 +490,7 @@ export function createBrowserPreviewBackend(
 
       // Close session if we have one
       if (sessionId) {
-        client
-          .request('session.close', { sessionId })
-          .catch(() => {});
+        client.request('session.close', { sessionId }).catch(() => {});
         sessionId = null;
       }
 
@@ -541,12 +564,26 @@ export function createBrowserPreviewBackend(
     },
   };
 
-  // Expose internal methods for testing
+  // Expose internal methods for testing and input
   const extendedBackend = backend as PreviewBackend & {
     /** Get frame metrics for testing. */
     getFrameMetrics: () => FrameMetrics;
     /** Set the container for surface mounting. */
     setContainer: (el: HTMLDivElement | null) => void;
+    /** Send pointer input to companion. */
+    sendPointerInput: (
+      type: string,
+      x: number,
+      y: number,
+      button?: string,
+      clickCount?: number
+    ) => void;
+    /** Send wheel input to companion. */
+    sendWheelInput: (deltaX: number, deltaY: number) => void;
+    /** Send keyboard input to companion. */
+    sendKeyboardInput: (type: string, key?: string, text?: string) => void;
+    /** Send touch input to companion. */
+    sendTouchInput: (type: string, x: number, y: number) => void;
   };
 
   extendedBackend.getFrameMetrics = () => ({ ...frameMetrics });
@@ -555,6 +592,79 @@ export function createBrowserPreviewBackend(
     if (el && state.lifecycle === 'ready') {
       ensureSurface();
     }
+  };
+
+  // Input methods (Phase 2B-3)
+  extendedBackend.sendPointerInput = (
+    type: string,
+    x: number,
+    y: number,
+    button?: string,
+    clickCount?: number
+  ) => {
+    if (destroyed || !sessionId) return;
+
+    const method =
+      type === 'doubleClick'
+        ? 'session.mouseDoubleClick'
+        : type === 'click'
+          ? 'session.mouseClick'
+          : `session.mouse${type.charAt(0).toUpperCase() + type.slice(1)}`;
+
+    client
+      .request(method, {
+        sessionId,
+        x,
+        y,
+        button: button ?? 'left',
+        clickCount: clickCount ?? (type === 'doubleClick' ? 2 : 1),
+      })
+      .catch(() => {});
+  };
+
+  extendedBackend.sendWheelInput = (deltaX: number, deltaY: number) => {
+    if (destroyed || !sessionId) return;
+
+    client
+      .request('session.wheel', {
+        sessionId,
+        deltaX,
+        deltaY,
+      })
+      .catch(() => {});
+  };
+
+  extendedBackend.sendKeyboardInput = (
+    type: string,
+    key?: string,
+    text?: string
+  ) => {
+    if (destroyed || !sessionId) return;
+
+    let method: string;
+    let params: Record<string, unknown>;
+
+    if (type === 'type') {
+      method = 'session.type';
+      params = { sessionId, text: text ?? '' };
+    } else {
+      method = `session.${type}`;
+      params = { sessionId, key: key ?? '' };
+    }
+
+    client.request(method, params).catch(() => {});
+  };
+
+  extendedBackend.sendTouchInput = (type: string, x: number, y: number) => {
+    if (destroyed || !sessionId) return;
+
+    client
+      .request(`session.touch${type.charAt(0).toUpperCase() + type.slice(1)}`, {
+        sessionId,
+        x,
+        y,
+      })
+      .catch(() => {});
   };
 
   return extendedBackend;

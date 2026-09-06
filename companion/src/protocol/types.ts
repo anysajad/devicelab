@@ -142,6 +142,153 @@ export interface ShutdownRequest extends RequestMessage {
   readonly method: 'shutdown';
 }
 
+// ---------------------------------------------------------------------------
+// Input commands (Phase 2B-3)
+// ---------------------------------------------------------------------------
+
+/** Mouse button identifiers. */
+export type MouseButton = 'left' | 'right' | 'middle';
+
+/** Modifier key state. */
+export interface ModifierState {
+  readonly shift?: boolean;
+  readonly ctrl?: boolean;
+  readonly alt?: boolean;
+  readonly meta?: boolean;
+}
+
+/** Mouse move command. */
+export interface MouseMoveRequest extends RequestMessage {
+  readonly method: 'session.mouseMove';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+  };
+}
+
+/** Mouse button down command. */
+export interface MouseDownRequest extends RequestMessage {
+  readonly method: 'session.mouseDown';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+    readonly button?: MouseButton;
+    readonly clickCount?: number;
+    readonly modifiers?: ModifierState;
+  };
+}
+
+/** Mouse button up command. */
+export interface MouseUpRequest extends RequestMessage {
+  readonly method: 'session.mouseUp';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+    readonly button?: MouseButton;
+    readonly clickCount?: number;
+    readonly modifiers?: ModifierState;
+  };
+}
+
+/** Mouse click command (convenience for down+up). */
+export interface MouseClickRequest extends RequestMessage {
+  readonly method: 'session.mouseClick';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+    readonly button?: MouseButton;
+    readonly clickCount?: number;
+    readonly modifiers?: ModifierState;
+  };
+}
+
+/** Double click command. */
+export interface MouseDoubleClickRequest extends RequestMessage {
+  readonly method: 'session.mouseDoubleClick';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+    readonly button?: MouseButton;
+  };
+}
+
+/** Wheel scroll command. */
+export interface WheelRequest extends RequestMessage {
+  readonly method: 'session.wheel';
+  readonly params: {
+    readonly sessionId: string;
+    readonly deltaX: number;
+    readonly deltaY: number;
+  };
+}
+
+/** Key down command. */
+export interface KeyDownRequest extends RequestMessage {
+  readonly method: 'session.keyDown';
+  readonly params: {
+    readonly sessionId: string;
+    readonly key: string;
+    readonly code?: string;
+    readonly modifiers?: ModifierState;
+  };
+}
+
+/** Key up command. */
+export interface KeyUpRequest extends RequestMessage {
+  readonly method: 'session.keyUp';
+  readonly params: {
+    readonly sessionId: string;
+    readonly key: string;
+    readonly code?: string;
+    readonly modifiers?: ModifierState;
+  };
+}
+
+/** Type text command. */
+export interface TypeRequest extends RequestMessage {
+  readonly method: 'session.type';
+  readonly params: {
+    readonly sessionId: string;
+    readonly text: string;
+    readonly delay?: number;
+  };
+}
+
+/** Touch start command. */
+export interface TouchStartRequest extends RequestMessage {
+  readonly method: 'session.touchStart';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+  };
+}
+
+/** Touch move command. */
+export interface TouchMoveRequest extends RequestMessage {
+  readonly method: 'session.touchMove';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+  };
+}
+
+/** Touch end command. */
+export interface TouchEndRequest extends RequestMessage {
+  readonly method: 'session.touchEnd';
+  readonly params: {
+    readonly sessionId: string;
+    readonly x: number;
+    readonly y: number;
+  };
+}
+
 export type ClientRequest =
   | HelloRequest
   | PingRequest
@@ -150,7 +297,19 @@ export type ClientRequest =
   | LoadUrlRequest
   | ReloadRequest
   | GetStateRequest
-  | ShutdownRequest;
+  | ShutdownRequest
+  | MouseMoveRequest
+  | MouseDownRequest
+  | MouseUpRequest
+  | MouseClickRequest
+  | MouseDoubleClickRequest
+  | WheelRequest
+  | KeyDownRequest
+  | KeyUpRequest
+  | TypeRequest
+  | TouchStartRequest
+  | TouchMoveRequest
+  | TouchEndRequest;
 
 // ---------------------------------------------------------------------------
 // Server → Client responses

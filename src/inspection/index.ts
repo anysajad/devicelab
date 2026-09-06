@@ -6,6 +6,7 @@ export type {
   DiagnosticType,
   ElementReference,
   InspectionContext,
+  InspectionInaccessibleReason,
   InspectionResult,
   InspectionStatus,
   InspectionStatusError,
@@ -19,6 +20,7 @@ export { DOMMeasurementAdapter } from './measurement';
 export { DEFAULT_CHECKERS } from './checkers';
 export {
   createInspectionContext,
+  inspectDocument,
   inspectIframe,
   runInspection,
 } from './inspectionEngine';

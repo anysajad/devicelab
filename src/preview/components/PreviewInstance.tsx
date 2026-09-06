@@ -8,11 +8,8 @@ import { usePreviewStore } from '../store/usePreviewStore';
 import { usePreviewInspection } from '../inspection/usePreviewInspection';
 import { useScreenshot } from '../useScreenshot';
 import { CUSTOM_DEVICE_ID } from '../types';
-import type {
-  PreviewController,
-  PreviewEntry,
-  PreviewInstanceId,
-} from '../types';
+import type { PreviewBackend } from '../backend';
+import type { PreviewEntry, PreviewInstanceId } from '../types';
 import { PreviewFrame } from './PreviewFrame';
 import { PreviewToolbar } from './PreviewToolbar';
 import { DEFAULT_VIEW_TOOLS } from '../viewTools';
@@ -22,10 +19,10 @@ interface PreviewInstanceProps {
   entry: PreviewEntry;
   sharedUrl: string;
   onRemove?: (id: string) => void;
-  /** Notify the parent workspace when this instance's controller becomes available. */
-  onControllerReady?: (
+  /** Notify the parent workspace when this instance's backend becomes available. */
+  onBackendReady?: (
     id: PreviewInstanceId,
-    controller: PreviewController | null
+    backend: PreviewBackend | null
   ) => void;
 }
 
@@ -62,19 +59,19 @@ function createSyntheticDevice(
 }
 
 /**
- * A single preview instance that owns exactly one usePreview() controller.
+ * A single preview instance that owns exactly one usePreview() backend.
  *
  * Invariant: ONE PreviewEntry = ONE PreviewInstance = ONE usePreview()
- * = ONE PreviewController = ONE iframe.
+ * = ONE PreviewBackend = ONE preview surface.
  *
  * Reads its entry from props (derived from the store via selector).
- * Manages controller lifecycle via usePreview().
+ * Manages backend lifecycle via usePreview().
  */
 export function PreviewInstance({
   entry,
   sharedUrl,
   onRemove,
-  onControllerReady,
+  onBackendReady,
 }: PreviewInstanceProps) {
   const updateEntry = usePreviewStore((s) => s.updateEntry);
   const updateLifecycleStatus = usePreviewStore((s) => s.updateLifecycleStatus);
@@ -96,7 +93,7 @@ export function PreviewInstance({
 
   const {
     state,
-    controller,
+    backend,
     containerRef,
     reload,
     zoomIn,
@@ -124,25 +121,25 @@ export function PreviewInstance({
     customHeight: number | undefined;
   } | null>(null);
 
-  // Note: a single usePreview() call owns controller + containerRef together.
+  // Note: a single usePreview() call owns backend + containerRef together.
   // A previous revision called usePreview() twice, which produced a ghost
   // controller: the instance that received load() had no bound DOM container,
-  // and the container-bound controller never loaded — so no iframe rendered.
+  // and the container-bound controller never loaded — so no surface rendered.
   // (Found by Playwright E2E validation.)
 
-  // Register this instance's controller with the workspace so the diagnostics
-  // panel can resolve iframes for highlighting. Fires once per mount; stable
-  // across re-renders (controller is created once in usePreview).
+  // Register this instance's backend with the workspace so the diagnostics
+  // panel can resolve inspection documents for highlighting. Fires once per
+  // mount; stable across re-renders (backend is created once in usePreview).
   useEffect(() => {
-    onControllerReady?.(entry.id, controller);
-    return () => onControllerReady?.(entry.id, null);
-  }, [entry.id, controller, onControllerReady]);
+    onBackendReady?.(entry.id, backend);
+    return () => onBackendReady?.(entry.id, null);
+  }, [entry.id, backend, onBackendReady]);
 
   // Run inspection when the workspace toggles inspection active / rescan.
-  usePreviewInspection(entry.id, controller);
+  usePreviewInspection(entry.id, backend);
 
-  // Per-instance screenshot capture (reads controller only; non-mutating).
-  const screenshot = useScreenshot(controller);
+  // Per-instance screenshot capture (reads backend only; non-mutating).
+  const screenshot = useScreenshot(backend);
 
   // Load when effective configuration actually changes.
   useEffect(() => {
@@ -171,17 +168,17 @@ export function PreviewInstance({
       prev.customHeight !== entry.customViewportHeight;
 
     // Safe against React StrictMode's simulated unmount/remount: the teardown
-    // destroys the controller (config resets to idle), and loadedConfigRef
+    // destroys the backend (config resets to idle), and loadedConfigRef
     // survives. Without this check the remounted instance would skip load()
     // and leave an empty frame. Only force a reload when there is a real URL
     // to load — an empty URL (about:blank) must rely on the changed() dedupe,
     // otherwise the effect re-fires and re-loads forever. (Found by Playwright
     // E2E validation.)
     const needsReload =
-      effectiveUrl !== '' && controller.getState().config.url === '';
+      effectiveUrl !== '' && backend.getState().config.url === '';
 
     if (changed || needsReload) {
-      controller.load({
+      backend.load({
         url: effectiveUrl,
         device: effectiveDevice,
         orientation,
@@ -203,7 +200,7 @@ export function PreviewInstance({
     entry.customViewportWidth,
     entry.customViewportHeight,
     effectiveDevice,
-    controller,
+    backend,
     isCustomViewport,
   ]);
 

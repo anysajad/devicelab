@@ -64,22 +64,14 @@ export interface CompanionClientConfig {
 // ---------------------------------------------------------------------------
 
 export type ClientState =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'authenticated'
-  | 'error';
+  'disconnected' | 'connecting' | 'connected' | 'authenticated' | 'error';
 
 // ---------------------------------------------------------------------------
 // Client events
 // ---------------------------------------------------------------------------
 
 export type ClientEventType =
-  | 'stateChange'
-  | 'lifecycle'
-  | 'closed'
-  | 'shutdown'
-  | 'frame';
+  'stateChange' | 'lifecycle' | 'closed' | 'shutdown' | 'frame';
 
 /** Frame data received from the companion. */
 export interface FrameData {
@@ -122,7 +114,10 @@ export interface CompanionClient {
   /** Disconnect from the companion */
   disconnect(): Promise<void>;
   /** Send a request and wait for response */
-  request(method: string, params?: Record<string, unknown>): Promise<ResponseMessage>;
+  request(
+    method: string,
+    params?: Record<string, unknown>
+  ): Promise<ResponseMessage>;
   /** Subscribe to client events */
   on(listener: ClientEventListener): () => void;
   /** Get the session ID if authenticated */

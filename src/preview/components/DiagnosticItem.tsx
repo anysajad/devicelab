@@ -5,7 +5,7 @@ import type {
   DiagnosticSeverity,
   ElementReference,
 } from '@/inspection';
-import type { PreviewController } from '../types';
+import type { PreviewBackend } from '../backend';
 import {
   clearHighlight,
   highlightElement,
@@ -93,8 +93,8 @@ function sourceLabel(ref: ElementReference): string {
 
 interface DiagnosticItemProps {
   diagnostic: Diagnostic;
-  /** The preview controller for this entry, used to resolve the highlight target. */
-  controller: PreviewController | undefined;
+  /** The preview backend for this entry, used to resolve the highlight target. */
+  backend: PreviewBackend | undefined;
   /** Currently highlighted diagnostic ID for this entry, if any. */
   highlightedId: string | null;
   /** Toggle highlight on/off for a diagnostic. */
@@ -103,7 +103,7 @@ interface DiagnosticItemProps {
 
 export function DiagnosticItem({
   diagnostic,
-  controller,
+  backend,
   highlightedId,
   onToggleHighlight,
 }: DiagnosticItemProps) {
@@ -115,9 +115,11 @@ export function DiagnosticItem({
     : '';
 
   const handleHighlight = useCallback(() => {
-    if (!controller) return;
-    const iframe = controller.getIframe();
-    const doc = iframe?.contentDocument ?? null;
+    if (!backend) return;
+    const access = backend.getInspectionAccess();
+    // Highlights are same-origin only — never fabricate access to pages the
+    // backend reports as inaccessible.
+    const doc = access?.status === 'available' ? access.document : null;
     if (isHighlighted) {
       // Clear this specific highlight
       clearHighlight(doc);
@@ -134,7 +136,7 @@ export function DiagnosticItem({
       onToggleHighlight(diagnostic.id);
     }
   }, [
-    controller,
+    backend,
     diagnostic.id,
     diagnostic.element,
     diagnostic.relatedElement,
@@ -174,7 +176,7 @@ export function DiagnosticItem({
           {diagnostic.message}
         </p>
       </div>
-      {controller && (
+      {backend && (
         <button
           type="button"
           onClick={handleHighlight}

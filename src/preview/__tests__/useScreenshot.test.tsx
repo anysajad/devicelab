@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PreviewController, PreviewState } from '../types';
+import type { PreviewState } from '../types';
+import type { PreviewBackend } from '../backend';
 import type { ScreenshotResult } from '../../screenshot';
 
 const mock = vi.hoisted(() => ({
@@ -14,13 +15,13 @@ vi.mock('../../screenshot', () => ({
 
 import { useScreenshot } from '../useScreenshot';
 
-function makeController(overrides?: {
+function makeBackend(overrides?: {
   iframe?: HTMLIFrameElement | null;
   deviceName?: string;
   width?: number;
   height?: number;
   lifecycle?: PreviewState['lifecycle'];
-}): PreviewController {
+}): PreviewBackend {
   const {
     iframe = document.createElement('iframe'),
     deviceName = 'iPhone 15',
@@ -29,6 +30,7 @@ function makeController(overrides?: {
     lifecycle = 'ready',
   } = overrides ?? {};
   return {
+    kind: 'iframe',
     getState: () =>
       ({
         config: { device: { name: deviceName } },
@@ -41,8 +43,8 @@ function makeController(overrides?: {
         lifecycle,
         error: null,
       }) as PreviewState,
-    getIframe: () => iframe,
-  } as unknown as PreviewController;
+    getScreenshotSource: () => ({ iframe, deviceName }),
+  } as unknown as PreviewBackend;
 }
 
 function okResult(): ScreenshotResult {
@@ -79,7 +81,7 @@ describe('useScreenshot', () => {
   it('triggers a download and surfaces status ok on success', async () => {
     mock.capturer.capture.mockResolvedValue(okResult());
     const appendSpy = vi.spyOn(document.body, 'appendChild');
-    const { result } = renderHook(() => useScreenshot(makeController()));
+    const { result } = renderHook(() => useScreenshot(makeBackend()));
 
     expect(result.current.status).toBeNull();
     expect(result.current.isBusy).toBe(false);
@@ -104,13 +106,13 @@ describe('useScreenshot', () => {
   it('passes the iframe, device name, and spec dimensions to the capturer', async () => {
     mock.capturer.capture.mockResolvedValue(okResult());
     const iframe = document.createElement('iframe');
-    const controller = makeController({
+    const backend = makeBackend({
       iframe,
       deviceName: 'Pixel 9',
       width: 412,
       height: 915,
     });
-    const { result } = renderHook(() => useScreenshot(controller));
+    const { result } = renderHook(() => useScreenshot(backend));
 
     await act(async () => {
       await result.current.capture();
@@ -124,7 +126,7 @@ describe('useScreenshot', () => {
 
   it('surfaces cross-origin status without downloading', async () => {
     mock.capturer.capture.mockResolvedValue({ status: 'cross-origin' });
-    const { result } = renderHook(() => useScreenshot(makeController()));
+    const { result } = renderHook(() => useScreenshot(makeBackend()));
 
     await act(async () => {
       await result.current.capture();
@@ -138,7 +140,7 @@ describe('useScreenshot', () => {
     for (const status of ['not-ready', 'render-failed'] as const) {
       mock.capturer.capture.mockResolvedValueOnce({ status });
       const { result, unmount } = renderHook(() =>
-        useScreenshot(makeController())
+        useScreenshot(makeBackend())
       );
       await act(async () => {
         await result.current.capture();
@@ -151,7 +153,7 @@ describe('useScreenshot', () => {
 
   it('surfaces render-failed when capture throws', async () => {
     mock.capturer.capture.mockRejectedValue(new Error('boom'));
-    const { result } = renderHook(() => useScreenshot(makeController()));
+    const { result } = renderHook(() => useScreenshot(makeBackend()));
 
     await act(async () => {
       await result.current.capture();
@@ -168,7 +170,7 @@ describe('useScreenshot', () => {
           resolve = res;
         })
     );
-    const { result } = renderHook(() => useScreenshot(makeController()));
+    const { result } = renderHook(() => useScreenshot(makeBackend()));
 
     let first: Promise<void> = Promise.resolve();
     act(() => {
@@ -191,9 +193,7 @@ describe('useScreenshot', () => {
 
   it('revokes the last object URL on unmount', async () => {
     mock.capturer.capture.mockResolvedValue(okResult());
-    const { result, unmount } = renderHook(() =>
-      useScreenshot(makeController())
-    );
+    const { result, unmount } = renderHook(() => useScreenshot(makeBackend()));
 
     await act(async () => {
       await result.current.capture();
@@ -205,11 +205,11 @@ describe('useScreenshot', () => {
 
   it('refuses to capture a failed (error) preview and never fabricates a PNG', async () => {
     mock.capturer.capture.mockResolvedValue(okResult());
-    const controller = makeController({
+    const backend = makeBackend({
       lifecycle: 'error',
       iframe: document.createElement('iframe'),
     });
-    const { result } = renderHook(() => useScreenshot(controller));
+    const { result } = renderHook(() => useScreenshot(backend));
 
     await act(async () => {
       await result.current.capture();
@@ -222,14 +222,14 @@ describe('useScreenshot', () => {
     expect(result.current.isBusy).toBe(false);
   });
 
-  it('never mutates the controller', async () => {
+  it('never mutates the backend', async () => {
     mock.capturer.capture.mockResolvedValue(okResult());
     const setZoomSpy = vi.fn();
-    const controller = makeController() as unknown as PreviewController & {
+    const backend = makeBackend() as unknown as PreviewBackend & {
       setZoom: () => void;
     };
-    controller.setZoom = setZoomSpy;
-    const { result } = renderHook(() => useScreenshot(controller));
+    backend.setZoom = setZoomSpy;
+    const { result } = renderHook(() => useScreenshot(backend));
 
     await act(async () => {
       await result.current.capture();

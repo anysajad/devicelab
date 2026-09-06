@@ -4,11 +4,8 @@ import { getDeviceById } from '@/devices';
 import type { Diagnostic, DiagnosticSeverity } from '@/inspection';
 import { clearAllIframeHighlights } from '../inspection/highlight';
 import { usePreviewStore } from '../store/usePreviewStore';
-import type {
-  InspectionPhase,
-  PreviewInstanceId,
-  PreviewController,
-} from '../types';
+import type { PreviewBackend } from '../backend';
+import type { InspectionPhase, PreviewInstanceId } from '../types';
 import { DiagnosticItem } from './DiagnosticItem';
 
 const SEVERITY_ORDER: DiagnosticSeverity[] = ['error', 'warning', 'info'];
@@ -23,14 +20,14 @@ interface DiagnosticsGroup {
 }
 
 interface InspectionsPanelProps {
-  /** Resolve the controller for a given preview entry (for highlighting). */
-  getController: (id: PreviewInstanceId) => PreviewController | undefined;
+  /** Resolve the backend for a given preview entry (for highlighting). */
+  getBackend: (id: PreviewInstanceId) => PreviewBackend | undefined;
   /** Close the inspection panel and clear results. */
   onClose: () => void;
 }
 
 export function InspectionsPanel({
-  getController,
+  getBackend,
   onClose,
 }: InspectionsPanelProps) {
   const inspectionResults = usePreviewStore((s) => s.inspectionResults);
@@ -169,12 +166,12 @@ export function InspectionsPanel({
 
   const handleRescan = useCallback(() => {
     setHighlightedIds({});
-    clearAllIframeHighlights(
-      (id) => getController(id)?.getIframe()?.contentDocument ?? null,
-      visibleIds
-    );
+    clearAllIframeHighlights((id) => {
+      const access = getBackend(id)?.getInspectionAccess();
+      return access?.status === 'available' ? access.document : null;
+    }, visibleIds);
     requestInspection();
-  }, [setHighlightedIds, requestInspection, getController, visibleIds]);
+  }, [setHighlightedIds, requestInspection, getBackend, visibleIds]);
 
   return (
     <aside
@@ -355,7 +352,7 @@ export function InspectionsPanel({
                     <DiagnosticItem
                       key={diag.id}
                       diagnostic={diag}
-                      controller={getController(group.entryId)}
+                      backend={getBackend(group.entryId)}
                       highlightedId={highlightedIds[group.entryId] ?? null}
                       onToggleHighlight={(diagId) =>
                         handleToggleHighlight(group.entryId, diagId)

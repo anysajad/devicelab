@@ -91,6 +91,10 @@ interface InspectionContext {
 
 // --- Inspection status (discriminated union) ---
 
+/** Why an inspection could not run against an otherwise-present preview. */
+export type InspectionInaccessibleReason =
+  'cross-origin' | 'contentDocument-unavailable';
+
 interface InspectionStatusLoading {
   /** iframe exists but document is not yet ready for inspection. */
   status: 'loading';
@@ -115,7 +119,7 @@ interface InspectionStatusInaccessible {
   /** Document exists but contentDocument is not accessible. */
   status: 'inaccessible';
   /** Why inspection was not possible. */
-  reason: 'cross-origin' | 'contentDocument-unavailable';
+  reason: InspectionInaccessibleReason;
 }
 
 interface InspectionStatusError {

@@ -2,6 +2,7 @@ import type {
   Diagnostic,
   DiagnosticChecker,
   InspectionContext,
+  InspectionInaccessibleReason,
   InspectionResult,
   MeasurementAdapter,
   ViewportSize,
@@ -98,6 +99,34 @@ export function runInspection(
 }
 
 /**
+ * Run inspection against an already-accessible, ready document.
+ *
+ * Callers are responsible for ensuring the document is reachable and ready
+ * (e.g. via a preview backend's `getInspectionAccess()`). This never touches
+ * an iframe, so it is the reusable core of `inspectIframe` and the entry point
+ * for backends that can hand over a live Document directly.
+ */
+export function inspectDocument(
+  doc: Document,
+  viewport: ViewportSize
+): InspectionResult {
+  const inspectedAt = Date.now();
+  try {
+    const context = createInspectionContext(doc, viewport);
+    return runInspection(context);
+  } catch (err) {
+    return {
+      status: {
+        status: 'error',
+        message: err instanceof Error ? err.message : String(err),
+        cause: err,
+      },
+      inspectedAt,
+    };
+  }
+}
+
+/**
  * Inspect an existing iframe.
  *
  * Never creates an iframe, never modifies iframe lifecycle. Uses
@@ -157,17 +186,5 @@ export function inspectIframe(
     return { status: { status: 'loading' }, inspectedAt };
   }
 
-  try {
-    const context = createInspectionContext(doc, viewport);
-    return runInspection(context);
-  } catch (err) {
-    return {
-      status: {
-        status: 'error',
-        message: err instanceof Error ? err.message : String(err),
-        cause: err,
-      },
-      inspectedAt,
-    };
-  }
+  return inspectDocument(doc, viewport);
 }

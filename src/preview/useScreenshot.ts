@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { PreviewController } from './types';
+import type { PreviewBackend } from './backend';
 import { createScreenshotCapturer } from '../screenshot';
 import type { ScreenshotStatus } from '../screenshot';
 
@@ -14,18 +14,16 @@ export interface UseScreenshotReturn {
 }
 
 /**
- * Wire a PreviewController into the screenshot subsystem.
+ * Wire a PreviewBackend into the screenshot subsystem.
  *
- * Reads ONLY `controller.getIframe()` and `controller.getState()` — it never
- * mutates the controller, zoom, viewport, or inspection state.
+ * Reads ONLY `backend.getState()` and `backend.getScreenshotSource()` — it
+ * never mutates the backend, zoom, viewport, or inspection state.
  *
  * On success, downloads the produced PNG via a temporary anchor and revokes the
  * object URL. On unsupported/errors, the status is surfaced for the UI; no
  * misleading PNG is produced.
  */
-export function useScreenshot(
-  controller: PreviewController
-): UseScreenshotReturn {
+export function useScreenshot(backend: PreviewBackend): UseScreenshotReturn {
   const [status, setStatus] = useState<ScreenshotStatus | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -61,8 +59,7 @@ export function useScreenshot(
     setIsBusy(true);
 
     try {
-      const state = controller.getState();
-      const iframe = controller.getIframe();
+      const state = backend.getState();
 
       // Honest guard: only a fully-loaded preview can be captured. An error
       // state, a still-loading page, or an idle/blank page must never produce a
@@ -73,15 +70,21 @@ export function useScreenshot(
         return;
       }
 
+      // The abstract boundary into the screenshot subsystem: the backend
+      // supplies the source; a null source means this rendering strategy has
+      // no same-origin capturer path.
+      const source = backend.getScreenshotSource();
+      if (!source) {
+        setStatus('not-ready');
+        return;
+      }
+
       const spec = {
         width: state.viewport.width,
         height: state.viewport.height,
       };
 
-      const result = await capturer.capture(
-        { iframe, deviceName: state.config.device.name ?? 'preview' },
-        spec
-      );
+      const result = await capturer.capture(source, spec);
 
       if (result.status === 'ok') {
         downloadBlob(result.url, result.filename);
@@ -94,7 +97,7 @@ export function useScreenshot(
     } finally {
       setIsBusy(false);
     }
-  }, [capturer, controller, isBusy, downloadBlob]);
+  }, [capturer, backend, isBusy, downloadBlob]);
 
   // Revoke the last object URL on unmount.
   useEffect(() => {

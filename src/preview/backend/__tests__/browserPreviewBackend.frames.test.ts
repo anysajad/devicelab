@@ -4,9 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WebSocketServer } from 'ws';
-import {
-  createBrowserPreviewBackend,
-} from '../browserPreviewBackend';
+import { createBrowserPreviewBackend } from '../browserPreviewBackend';
 import type { PreviewBackend } from '../types.js';
 
 describe('BrowserPreviewBackend Frame Consumption', () => {
@@ -151,7 +149,11 @@ describe('BrowserPreviewBackend Frame Consumption', () => {
     // Wait for frames
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    const metrics = (backend as unknown as { getFrameMetrics: () => { framesReceived: number; fps: number } }).getFrameMetrics();
+    const metrics = (
+      backend as unknown as {
+        getFrameMetrics: () => { framesReceived: number; fps: number };
+      }
+    ).getFrameMetrics();
     expect(metrics.framesReceived).toBeGreaterThan(0);
     expect(metrics.fps).toBeGreaterThan(0);
   });
@@ -262,7 +264,11 @@ describe('BrowserPreviewBackend Frame Consumption', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    const metrics = (backend as unknown as { getFrameMetrics: () => { framesReceived: number } }).getFrameMetrics();
+    const metrics = (
+      backend as unknown as {
+        getFrameMetrics: () => { framesReceived: number };
+      }
+    ).getFrameMetrics();
     // Should only count frames from the current session
     expect(metrics.framesReceived).toBeGreaterThanOrEqual(0);
   });
@@ -300,9 +306,17 @@ describe('BrowserPreviewBackend Frame Consumption', () => {
     backend.destroy();
 
     // Should not receive more frames after destroy
-    const metricsBefore = (backend as unknown as { getFrameMetrics: () => { framesReceived: number } }).getFrameMetrics();
+    const metricsBefore = (
+      backend as unknown as {
+        getFrameMetrics: () => { framesReceived: number };
+      }
+    ).getFrameMetrics();
     await new Promise((resolve) => setTimeout(resolve, 200));
-    const metricsAfter = (backend as unknown as { getFrameMetrics: () => { framesReceived: number } }).getFrameMetrics();
+    const metricsAfter = (
+      backend as unknown as {
+        getFrameMetrics: () => { framesReceived: number };
+      }
+    ).getFrameMetrics();
 
     expect(metricsAfter.framesReceived).toBe(metricsBefore.framesReceived);
   });
