@@ -42,11 +42,12 @@ export function createLocalStorageAdapter(storage?: Storage): StorageAdapter {
       }
     },
 
-    setItem(key: string, value: string): void {
+    setItem(key: string, value: string): boolean {
       try {
         store?.setItem(key, value);
+        return true;
       } catch {
-        // Quota or SecurityError — silently ignored
+        return false;
       }
     },
 
@@ -87,8 +88,9 @@ export function createMemoryAdapter(): StorageAdapter & {
     getItem(key: string): string | null {
       return data.get(key) ?? null;
     },
-    setItem(key: string, value: string): void {
+    setItem(key: string, value: string): boolean {
       data.set(key, value);
+      return true;
     },
     removeItem(key: string): void {
       data.delete(key);

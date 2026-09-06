@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { ProjectBar } from '../projects/components/ProjectBar';
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -12,6 +14,8 @@ export function Layout({ children }: LayoutProps) {
           <span className="text-lg font-semibold text-brand-600 dark:text-brand-400">
             DeviceLab
           </span>
+          <div className="flex-1" />
+          <ProjectBar />
         </div>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>

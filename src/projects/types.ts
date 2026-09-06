@@ -110,7 +110,8 @@ export type Result<T> = Ok<T> | Err;
  */
 export interface StorageAdapter {
   getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
+  /** Returns true if the write succeeded, false on quota/security errors. */
+  setItem(key: string, value: string): boolean;
   removeItem(key: string): void;
   keys(prefix: string): string[];
 }

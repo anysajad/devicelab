@@ -52,10 +52,10 @@ export interface ProjectRepository {
   list(): ProjectSummary[];
   /** Get a full record by ID. Returns error for corrupted/unsupported records. */
   get(id: string): Result<ProjectRecord>;
-  /** Create a new project with initial data. */
-  create(data: ProjectData, name?: string): ProjectRecord;
-  /** Save (overwrite) an existing record. Preserves createdAt, bumps updatedAt. */
-  save(record: ProjectRecord): void;
+  /** Create a new project with initial data. Returns failure if storage write fails. */
+  create(data: ProjectData, name?: string): Result<ProjectRecord>;
+  /** Save (overwrite) an existing record. Returns true on success. Preserves createdAt, bumps updatedAt. */
+  save(record: ProjectRecord): boolean;
   /** Remove a project by ID. No-op if missing. */
   remove(id: string): void;
   /** Get the last-opened project ID, or null. */
@@ -178,15 +178,18 @@ export function createProjectRepository(
       return parseAndValidate(id);
     },
 
-    create(data: ProjectData, name?: string): ProjectRecord {
+    create(data: ProjectData, name?: string): Result<ProjectRecord> {
       const id = generateId();
       const meta = createProjectMeta(name);
       const record = buildProjectRecord(id, data, meta);
-      storage.setItem(recordKey(id), JSON.stringify(record));
-      return record;
+      const persisted = storage.setItem(recordKey(id), JSON.stringify(record));
+      if (!persisted) {
+        return { ok: false, reason: 'storage write failed' };
+      }
+      return { ok: true, value: record };
     },
 
-    save(record: ProjectRecord): void {
+    save(record: ProjectRecord): boolean {
       // Preserve original createdAt from the persisted record (if it exists)
       const existing = readRaw(record.id);
       let createdAt = record.meta.createdAt;
@@ -211,7 +214,7 @@ export function createProjectRepository(
           updatedAt: new Date().toISOString(),
         },
       };
-      storage.setItem(recordKey(record.id), JSON.stringify(savedRecord));
+      return storage.setItem(recordKey(record.id), JSON.stringify(savedRecord));
     },
 
     remove(id: string): void {

@@ -50,42 +50,60 @@ describe('ProjectRepository', () => {
       const repo = createProjectRepository(createMemoryAdapter());
       const r1 = repo.create(makeData());
       const r2 = repo.create(makeData());
-      expect(r1.id).not.toBe(r2.id);
+      expect(r1.ok && r2.ok).toBe(true);
+      if (r1.ok && r2.ok) {
+        expect(r1.value.id).not.toBe(r2.value.id);
+      }
     });
 
     it('sets name from argument', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData(), 'My Project');
-      expect(record.meta.name).toBe('My Project');
+      const result = repo.create(makeData(), 'My Project');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.meta.name).toBe('My Project');
     });
 
     it('uses default name when not provided', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData());
-      expect(record.meta.name).toBe('Untitled project');
+      const result = repo.create(makeData());
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.meta.name).toBe('Untitled project');
     });
 
     it('generates createdAt and updatedAt as ISO strings', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData());
-      expect(Number.isFinite(Date.parse(record.meta.createdAt))).toBe(true);
-      expect(Number.isFinite(Date.parse(record.meta.updatedAt))).toBe(true);
+      const result = repo.create(makeData());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(Number.isFinite(Date.parse(result.value.meta.createdAt))).toBe(
+          true
+        );
+        expect(Number.isFinite(Date.parse(result.value.meta.updatedAt))).toBe(
+          true
+        );
+      }
     });
 
     it('sets both timestamps to the same value on create', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData());
-      expect(record.meta.createdAt).toBe(record.meta.updatedAt);
+      const result = repo.create(makeData());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.meta.createdAt).toBe(result.value.meta.updatedAt);
+      }
     });
 
     it('persists the record so get returns it', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const created = repo.create(makeData(), 'Saved');
-      const fetched = repo.get(created.id);
-      expect(fetched.ok).toBe(true);
-      if (fetched.ok) {
-        expect(fetched.value.id).toBe(created.id);
-        expect(fetched.value.meta.name).toBe('Saved');
+      const createResult = repo.create(makeData(), 'Saved');
+      expect(createResult.ok).toBe(true);
+      if (createResult.ok) {
+        const fetched = repo.get(createResult.value.id);
+        expect(fetched.ok).toBe(true);
+        if (fetched.ok) {
+          expect(fetched.value.id).toBe(createResult.value.id);
+          expect(fetched.value.meta.name).toBe('Saved');
+        }
       }
     });
   });
@@ -176,7 +194,8 @@ describe('ProjectRepository', () => {
         meta: { ...original.meta, createdAt: fixedCreatedAt },
         data: { ...original.data, sharedUrl: 'https://changed.com' },
       };
-      repo.save(saved);
+      const ok = repo.save(saved);
+      expect(ok).toBe(true);
 
       const fetched = repo.get('seeded');
       expect(fetched.ok).toBe(true);
@@ -189,7 +208,8 @@ describe('ProjectRepository', () => {
     it('creates if record does not yet exist', () => {
       const repo = createProjectRepository(createMemoryAdapter());
       const record = makeRecord({ id: 'new-id' });
-      repo.save(record);
+      const ok = repo.save(record);
+      expect(ok).toBe(true);
       const fetched = repo.get('new-id');
       expect(fetched.ok).toBe(true);
     });
@@ -198,9 +218,12 @@ describe('ProjectRepository', () => {
   describe('remove', () => {
     it('removes a record', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData());
-      repo.remove(record.id);
-      expect(repo.get(record.id).ok).toBe(false);
+      const result = repo.create(makeData());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        repo.remove(result.value.id);
+        expect(repo.get(result.value.id).ok).toBe(false);
+      }
     });
 
     it('removing nonexistent id is a no-op', () => {
@@ -210,10 +233,13 @@ describe('ProjectRepository', () => {
 
     it('clears lastOpened pointer if removing the last-opened project', () => {
       const repo = createProjectRepository(createMemoryAdapter());
-      const record = repo.create(makeData());
-      repo.setLastOpened(record.id);
-      repo.remove(record.id);
-      expect(repo.getLastOpened()).toBeNull();
+      const result = repo.create(makeData());
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        repo.setLastOpened(result.value.id);
+        repo.remove(result.value.id);
+        expect(repo.getLastOpened()).toBeNull();
+      }
     });
   });
 
@@ -321,15 +347,18 @@ describe('ProjectRepository', () => {
         layoutMode: 'focus',
         activeId: 'preview-2',
       });
-      const created = repo.create(data, 'Round Trip');
-      const fetched = repo.get(created.id);
-      expect(fetched.ok).toBe(true);
-      if (fetched.ok) {
-        expect(fetched.value.data.sharedUrl).toBe('https://test.com');
-        expect(fetched.value.data.entries).toHaveLength(2);
-        expect(fetched.value.data.layoutMode).toBe('focus');
-        expect(fetched.value.data.activeId).toBe('preview-2');
-        expect(fetched.value.meta.name).toBe('Round Trip');
+      const createResult = repo.create(data, 'Round Trip');
+      expect(createResult.ok).toBe(true);
+      if (createResult.ok) {
+        const fetched = repo.get(createResult.value.id);
+        expect(fetched.ok).toBe(true);
+        if (fetched.ok) {
+          expect(fetched.value.data.sharedUrl).toBe('https://test.com');
+          expect(fetched.value.data.entries).toHaveLength(2);
+          expect(fetched.value.data.layoutMode).toBe('focus');
+          expect(fetched.value.data.activeId).toBe('preview-2');
+          expect(fetched.value.meta.name).toBe('Round Trip');
+        }
       }
     });
   });
