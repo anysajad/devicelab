@@ -5,6 +5,7 @@
  * - Transport (WebSocket)
  * - Browser lifecycle
  * - Session management
+ * - Screenshot capture
  * - Request handling
  */
 
@@ -29,6 +30,7 @@ import {
 } from './browser/companionBrowser.js';
 import {
   createBrowserSession,
+  type BrowserSession,
 } from './browser/browserSession.js';
 
 export interface CompanionServerConfig {
@@ -51,7 +53,7 @@ export interface CompanionServer {
 }
 
 const SERVER_NAME = 'devicelab-companion';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.2.0';
 
 /**
  * Create a new companion server.
@@ -67,6 +69,26 @@ export function createCompanionServer(
 
   function generateSessionId(): string {
     return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Start frame capture for a session and broadcast frames to all clients.
+   */
+  function startSessionFrameCapture(session: BrowserSession): void {
+    session.startFrameCapture((frame) => {
+      // Broadcast frame to all connected clients
+      transport?.broadcast({
+        event: 'session.frame',
+        data: frame,
+      });
+    });
+  }
+
+  /**
+   * Stop frame capture for a session.
+   */
+  function stopSessionFrameCapture(session: BrowserSession): void {
+    session.stopFrameCapture();
   }
 
   async function handleRequest(
@@ -134,6 +156,9 @@ export function createCompanionServer(
           await session.init(context);
           sessions.set(sessionId, session);
 
+          // Start frame capture for the new session
+          startSessionFrameCapture(session);
+
           return createSuccessResponse(msg.id, {
             sessionId,
             viewport: params.viewport,
@@ -159,6 +184,8 @@ export function createCompanionServer(
           );
         }
 
+        // Stop frame capture before closing
+        stopSessionFrameCapture(session);
         await session.close();
         sessions.delete(params.sessionId);
 
@@ -286,8 +313,9 @@ export function createCompanionServer(
   }
 
   async function stop(): Promise<void> {
-    // Close all sessions
+    // Stop all frame captures and close sessions
     for (const session of sessions.values()) {
+      stopSessionFrameCapture(session);
       await session.close();
     }
     sessions.clear();

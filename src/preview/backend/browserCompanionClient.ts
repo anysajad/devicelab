@@ -78,7 +78,20 @@ export type ClientEventType =
   | 'stateChange'
   | 'lifecycle'
   | 'closed'
-  | 'shutdown';
+  | 'shutdown'
+  | 'frame';
+
+/** Frame data received from the companion. */
+export interface FrameData {
+  readonly sessionId: string;
+  readonly sequence: number;
+  readonly width: number;
+  readonly height: number;
+  readonly encoding: 'jpeg';
+  /** Base64-encoded image data. */
+  readonly payload: string;
+  readonly timestamp: number;
+}
 
 export interface ClientEvent {
   readonly type: ClientEventType;
@@ -176,6 +189,9 @@ export function createCompanionClient(
           emit({ type: 'closed', data: event.data });
         } else if (event.event === 'companion.shutdown') {
           emit({ type: 'shutdown', data: event.data });
+        } else if (event.event === 'session.frame') {
+          // Frame event — emit without processing (raw payload)
+          emit({ type: 'frame', data: event.data });
         }
         return;
       }

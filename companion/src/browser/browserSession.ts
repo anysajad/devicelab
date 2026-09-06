@@ -4,6 +4,7 @@
  * Manages:
  * - Page lifecycle
  * - Navigation
+ * - Screenshot capture loop
  * - State reporting
  * - Clean cleanup
  *
@@ -28,6 +29,21 @@ export interface BrowserSessionState {
   readonly error: string | null;
 }
 
+/** Frame captured from the browser session. */
+export interface CapturedFrame {
+  readonly sessionId: string;
+  readonly sequence: number;
+  readonly width: number;
+  readonly height: number;
+  readonly encoding: 'jpeg';
+  /** Base64-encoded image data. */
+  readonly payload: string;
+  readonly timestamp: number;
+}
+
+/** Callback for frame events. */
+export type FrameCallback = (frame: CapturedFrame) => void;
+
 export interface BrowserSession {
   readonly id: string;
   /** Initialize the session with a browser context. */
@@ -42,9 +58,22 @@ export interface BrowserSession {
   close(): Promise<void>;
   /** Subscribe to state changes. */
   subscribe(listener: (state: BrowserSessionState) => void): () => void;
+  /** Start the screenshot capture loop. */
+  startFrameCapture(onFrame: FrameCallback): void;
+  /** Stop the screenshot capture loop. */
+  stopFrameCapture(): void;
 }
 
 const NAVIGATION_TIMEOUT = 15_000;
+
+/** Default JPEG quality for screenshots. */
+const DEFAULT_JPEG_QUALITY = 60;
+
+/** Default target FPS for screenshots. */
+const DEFAULT_TARGET_FPS = 10;
+
+/** Interval between screenshots in ms. */
+const FRAME_INTERVAL_MS = Math.floor(1000 / DEFAULT_TARGET_FPS);
 
 /**
  * Create a new browser session.
@@ -58,6 +87,10 @@ export function createBrowserSession(
   let url: string | null = null;
   let title: string | null = null;
   let error: string | null = null;
+  let sequence = 0;
+  let frameTimer: ReturnType<typeof setInterval> | null = null;
+  let frameCallback: FrameCallback | null = null;
+  let capturing = false;
   const listeners = new Set<(state: BrowserSessionState) => void>();
 
   function emit(): void {
@@ -86,6 +119,7 @@ export function createBrowserSession(
     page.on('crash', () => {
       error = 'Page crashed';
       setLifecycle('error');
+      stopFrameCapture();
     });
 
     setLifecycle('ready');
@@ -161,7 +195,61 @@ export function createBrowserSession(
     };
   }
 
+  async function captureFrame(): Promise<void> {
+    if (!page || capturing || lifecycle !== 'ready') {
+      return;
+    }
+
+    capturing = true;
+
+    try {
+      const buffer = await page.screenshot({
+        type: 'jpeg',
+        quality: DEFAULT_JPEG_QUALITY,
+      });
+
+      const frame: CapturedFrame = {
+        sessionId: config.id,
+        sequence: ++sequence,
+        width: config.viewport.width,
+        height: config.viewport.height,
+        encoding: 'jpeg',
+        payload: buffer.toString('base64'),
+        timestamp: Date.now(),
+      };
+
+      frameCallback?.(frame);
+    } catch (err) {
+      // Screenshot failed — don't crash the loop, just skip this frame
+      console.error(`[${config.id}] Screenshot failed:`, err);
+    } finally {
+      capturing = false;
+    }
+  }
+
+  function startFrameCapture(onFrame: FrameCallback): void {
+    if (frameTimer) {
+      return; // Already capturing
+    }
+
+    frameCallback = onFrame;
+    frameTimer = setInterval(captureFrame, FRAME_INTERVAL_MS);
+
+    // Capture first frame immediately
+    captureFrame();
+  }
+
+  function stopFrameCapture(): void {
+    if (frameTimer) {
+      clearInterval(frameTimer);
+      frameTimer = null;
+    }
+    frameCallback = null;
+    capturing = false;
+  }
+
   async function close(): Promise<void> {
+    stopFrameCapture();
     setLifecycle('closed');
 
     if (page) {
@@ -194,5 +282,7 @@ export function createBrowserSession(
     getState,
     close,
     subscribe,
+    startFrameCapture,
+    stopFrameCapture,
   };
 }

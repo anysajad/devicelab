@@ -1,18 +1,15 @@
 /**
- * Browser preview backend — Phase 2B-1 of the Playwright companion integration.
+ * Browser preview backend — Phase 2B-2 of the Playwright companion integration.
  *
  * This backend communicates with a local companion process over WebSocket
  * to control a real Chromium browser instance. It implements the abstract
  * `PreviewBackend` contract, allowing the existing PreviewInstance/usePreview
  * to operate without knowing the backend is Playwright-based.
  *
- * This phase establishes the control plane only:
- * - Session lifecycle
- * - URL navigation
- * - Viewport configuration
- * - State reporting
- *
- * The data plane (screenshot frames, canvas rendering) is deferred to Phase 2B-2.
+ * Phase 2B-2 adds:
+ * - Screenshot frame consumption
+ * - Canvas visual surface
+ * - Frame performance instrumentation
  */
 
 import type {
@@ -34,7 +31,11 @@ import type { SafeAreaInsets } from '@/devices';
 import {
   createCompanionClient,
 } from './browserCompanionClient';
-import type { ClientEvent } from './browserCompanionClient';
+import type { ClientEvent, FrameData } from './browserCompanionClient';
+import {
+  createBrowserPreviewSurface,
+  type BrowserPreviewSurface,
+} from './browserPreviewSurface';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -53,20 +54,6 @@ export interface BrowserPreviewBackendConfig {
 
 /**
  * Map companion session lifecycle states to preview lifecycle states.
- *
- * Companion states:
- *   idle → starting → ready → loading → error → closed
- *
- * Preview states:
- *   idle → loading → ready → error
- *
- * Mapping:
- *   idle → idle
- *   starting → loading (browser is starting)
- *   ready → ready (page loaded)
- *   loading → loading (navigation in progress)
- *   error → error (something went wrong)
- *   closed → error (session was closed unexpectedly)
  */
 function mapLifecycle(
   companionLifecycle: string,
@@ -124,6 +111,33 @@ function createDefaultState(): PreviewState {
 }
 
 // ---------------------------------------------------------------------------
+// Frame performance metrics
+// ---------------------------------------------------------------------------
+
+export interface FrameMetrics {
+  /** Total frames received. */
+  framesReceived: number;
+  /** Current FPS (frames in last second). */
+  fps: number;
+  /** Average frame size in bytes. */
+  avgFrameSize: number;
+  /** Total bytes received. */
+  totalBytes: number;
+  /** Timestamp of last frame. */
+  lastFrameTime: number;
+}
+
+function createFrameMetrics(): FrameMetrics {
+  return {
+    framesReceived: 0,
+    fps: 0,
+    avgFrameSize: 0,
+    totalBytes: 0,
+    lastFrameTime: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
@@ -134,13 +148,8 @@ function createDefaultState(): PreviewState {
  * - Connects to the companion via WebSocket
  * - Creates a browser session with the requested viewport
  * - Loads URLs via Playwright
+ * - Receives screenshot frames and renders them on a canvas
  * - Reports state back to the preview layer
- *
- * This phase does NOT:
- * - Stream screenshot frames
- * - Render canvas content
- * - Forward mouse/keyboard input
- * - Support DPR emulation
  */
 export function createBrowserPreviewBackend(
   config: BrowserPreviewBackendConfig
@@ -161,6 +170,12 @@ export function createBrowserPreviewBackend(
   let containerWidth = 800;
   let containerHeight = 600;
 
+  // Surface and frame state
+  let surface: BrowserPreviewSurface | null = null;
+  let container: HTMLDivElement | null = null;
+  const frameMetrics = createFrameMetrics();
+  const frameTimestamps: number[] = [];
+
   // ---------------------------------------------------------------------------
   // State management
   // ---------------------------------------------------------------------------
@@ -169,7 +184,6 @@ export function createBrowserPreviewBackend(
     if (zoomMode === 'manual') {
       return manualZoom;
     }
-    // Fit mode: scale to fit container
     const { width, height } = state.viewport;
     if (width === 0 || height === 0) return 1;
     const scaleX = containerWidth / width;
@@ -187,6 +201,46 @@ export function createBrowserPreviewBackend(
     for (const listener of listeners) {
       listener(state);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Frame handling
+  // ---------------------------------------------------------------------------
+
+  function updateFrameMetrics(frameSize: number): void {
+    const now = Date.now();
+    frameMetrics.framesReceived++;
+    frameMetrics.totalBytes += frameSize;
+    frameMetrics.lastFrameTime = now;
+    frameMetrics.avgFrameSize =
+      frameMetrics.totalBytes / frameMetrics.framesReceived;
+
+    // Track timestamps for FPS calculation
+    frameTimestamps.push(now);
+    // Keep only timestamps from the last second
+    const oneSecAgo = now - 1000;
+    while (frameTimestamps.length > 0 && (frameTimestamps[0] ?? 0) < oneSecAgo) {
+      frameTimestamps.shift();
+    }
+    frameMetrics.fps = frameTimestamps.length;
+  }
+
+  function handleFrame(frameData: FrameData): void {
+    if (destroyed) return;
+
+    // Ignore frames from stale sessions
+    if (frameData.sessionId !== sessionId) return;
+
+    // Update metrics
+    const payloadBytes = Math.ceil((frameData.payload.length * 3) / 4);
+    updateFrameMetrics(payloadBytes);
+
+    // Draw frame to surface
+    surface?.drawFrame(
+      frameData.payload,
+      frameData.width,
+      frameData.height
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -245,13 +299,17 @@ export function createBrowserPreviewBackend(
         }
         break;
       }
+      case 'frame': {
+        handleFrame(event.data as FrameData);
+        break;
+      }
     }
   }
 
   client.on(handleClientEvent);
 
   // ---------------------------------------------------------------------------
-  // PreviewBackend implementation
+  // Session management
   // ---------------------------------------------------------------------------
 
   async function initializeSession(
@@ -329,6 +387,20 @@ export function createBrowserPreviewBackend(
   }
 
   // ---------------------------------------------------------------------------
+  // Surface management
+  // ---------------------------------------------------------------------------
+
+  function ensureSurface(): void {
+    if (!container || surface) return;
+
+    surface = createBrowserPreviewSurface({
+      container,
+      width: state.viewport.width,
+      height: state.viewport.height,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
 
@@ -349,6 +421,9 @@ export function createBrowserPreviewBackend(
         lifecycle: 'loading',
         error: null,
       });
+
+      // Resize surface if it exists
+      surface?.resize(viewport.width, viewport.height);
 
       // Initialize session if needed, then load
       if (!sessionId) {
@@ -384,6 +459,10 @@ export function createBrowserPreviewBackend(
       if (destroyed) return;
       destroyed = true;
 
+      // Destroy surface
+      surface?.destroy();
+      surface = null;
+
       // Close session if we have one
       if (sessionId) {
         client
@@ -408,9 +487,9 @@ export function createBrowserPreviewBackend(
     },
 
     getSurface: (): PreviewSurface | null => {
-      // Phase 2B-1: No visual surface yet
-      // This will be a canvas element in Phase 2B-2
-      return null;
+      if (!container) return null;
+      ensureSurface();
+      return surface?.getCanvas() ?? null;
     },
 
     getInspectionAccess: (): PreviewInspectionAccess => {
@@ -419,7 +498,7 @@ export function createBrowserPreviewBackend(
     },
 
     getScreenshotSource: (): ScreenshotSource | null => {
-      // Screenshot frames are not delivered in this phase
+      // Screenshot frames are delivered via WebSocket, not via DOM iframe
       return null;
     },
 
@@ -462,5 +541,21 @@ export function createBrowserPreviewBackend(
     },
   };
 
-  return backend;
+  // Expose internal methods for testing
+  const extendedBackend = backend as PreviewBackend & {
+    /** Get frame metrics for testing. */
+    getFrameMetrics: () => FrameMetrics;
+    /** Set the container for surface mounting. */
+    setContainer: (el: HTMLDivElement | null) => void;
+  };
+
+  extendedBackend.getFrameMetrics = () => ({ ...frameMetrics });
+  extendedBackend.setContainer = (el: HTMLDivElement | null) => {
+    container = el;
+    if (el && state.lifecycle === 'ready') {
+      ensureSurface();
+    }
+  };
+
+  return extendedBackend;
 }

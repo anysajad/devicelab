@@ -1,6 +1,6 @@
 # Local Companion
 
-**Status:** Phase 2B-1 (BrowserPreviewBackend control plane)
+**Status:** Phase 2B-2 (Live Screenshot/Canvas Data Plane)
 
 ## Why the companion exists
 
@@ -12,6 +12,7 @@ DeviceLab's current iframe-based preview cannot render sites that refuse to be e
 ┌─────────────────────────┐     WebSocket (JSON RPC)     ┌──────────────────────────┐
 │   DeviceLab Web UI      │ ◄─────────────────────────► │   Companion Process      │
 │   (BrowserPreviewBackend)│     ws://127.0.0.1:PORT      │   (Node.js + Playwright) │
+│   (canvas surface)      │                              │   (screenshot capture)   │
 └─────────────────────────┘                              └────────────┬─────────────┘
                                                                      │
                                                             Playwright API
@@ -193,23 +194,82 @@ Phase 2B-1 establishes the control plane for browser-backed previews:
 
 ### Intentionally NOT Implemented Yet
 
-- ❌ Screenshot frame delivery (Phase 2B-2)
-- ❌ Canvas rendering (Phase 2B-2)
 - ❌ Mouse/keyboard input (Phase 2B-3)
 - ❌ DPR emulation
 - ❌ Authentication profiles/storageState
 - ❌ Multi-preview optimization
 
-### Why Screenshot Delivery is Deferred
+## Phase 2B-2: Live Screenshot/Canvas Data Plane
 
-Phase 2B-1 focuses on proving the control plane works end-to-end. Screenshot delivery requires:
+Phase 2B-2 adds real visual frame delivery:
 
-1. Canvas element for rendering
-2. Frame capture in companion
-3. Base64 encoding and transmission
-4. Image decoding and canvas drawing
+### Screenshot Capture
 
-These will be implemented in Phase 2B-2 after the control plane is validated.
+- Companion captures screenshots via `page.screenshot()` polling
+- Conservative target: ~10 FPS maximum per active session
+- JPEG quality: Q60 (matching feasibility spike)
+- Latest-frame-wins semantics (no frame queue)
+- Frame loop starts when session becomes ready
+- Frame loop stops on session close or browser disconnect
+
+### Frame Protocol
+
+```json
+{
+  "event": "session.frame",
+  "data": {
+    "sessionId": "s-1234567890-abc123",
+    "sequence": 1,
+    "width": 375,
+    "height": 667,
+    "encoding": "jpeg",
+    "payload": "base64-encoded-jpeg-data",
+    "timestamp": 1234567890123
+  }
+}
+```
+
+### Canvas Surface
+
+- Real HTMLCanvasElement renders screenshot frames
+- Canvas dimensions match CSS viewport (no DPR scaling yet)
+- Frames decoded via ImageBitmap for performance
+- Previous bitmaps released to prevent memory leaks
+- Latest-frame-wins semantics
+
+### Frame Lifecycle
+
+| Event | Behavior |
+| --- | --- |
+| First frame | Decoded and drawn to canvas |
+| Subsequent frames | Replace previous frame |
+| Navigation | Frame loop continues |
+| Reload | Frame loop continues |
+| Viewport change | Canvas resized, frames update |
+| Page error | Frame loop stops |
+| Browser disconnect | Frame loop stops |
+| Session close | Frame loop stops |
+
+### Current Capabilities
+
+- ✅ Screenshot capture at ~10 FPS
+- ✅ JPEG encoding (Q60)
+- ✅ Frame delivery via WebSocket
+- ✅ Canvas rendering
+- ✅ Frame performance metrics
+- ✅ Stale session frame rejection
+- ✅ Clean destroy/cleanup
+
+### Intentionally NOT Implemented Yet
+
+- ❌ Mouse/keyboard input (Phase 2B-3)
+- ❌ Wheel/scroll forwarding (Phase 2B-3)
+- ❌ Touch input (Phase 2B-3)
+- ❌ DPR emulation
+- ❌ Authentication profiles/storageState
+- ❌ Multi-preview optimization
+- ❌ Frame rate adaptation
+- ❌ Reconnection/retry UX
 
 ## Protocol example
 

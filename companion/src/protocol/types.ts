@@ -250,10 +250,37 @@ export interface CompanionShutdownEvent extends EventMessage {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Frame event (Phase 2B-2)
+// ---------------------------------------------------------------------------
+
+/** Supported frame encodings. */
+export type FrameEncoding = 'jpeg';
+
+/** Maximum frame payload size (10 MB). */
+export const MAX_FRAME_PAYLOAD_SIZE = 10 * 1024 * 1024;
+
+/** Frame event sent when a screenshot is captured. */
+export interface SessionFrameEvent extends EventMessage {
+  readonly event: 'session.frame';
+  readonly data: {
+    readonly sessionId: string;
+    readonly sequence: number;
+    readonly width: number;
+    readonly height: number;
+    readonly encoding: FrameEncoding;
+    /** Base64-encoded image data. */
+    readonly payload: string;
+    /** Timestamp when the frame was captured (ms since epoch). */
+    readonly timestamp: number;
+  };
+}
+
 export type ServerEvent =
   | SessionLifecycleEvent
   | SessionClosedEvent
-  | CompanionShutdownEvent;
+  | CompanionShutdownEvent
+  | SessionFrameEvent;
 
 // ---------------------------------------------------------------------------
 // Union types
