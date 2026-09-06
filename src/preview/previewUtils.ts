@@ -134,12 +134,52 @@ export function computeSafeArea(
 /** Allowed URL protocols for the preview iframe. */
 const ALLOWED_PROTOCOLS = ['http:', 'https:'];
 
+/** Percent-encoded whitespace seen when engines normalize bare-host inputs. */
+const ENCODED_WHITESPACE = /%20|%09|%0a|%0d/i;
+
+/**
+ * Whether a hostname refers to the local machine.
+ *
+ * Recognizes the `localhost` name, the `.localhost` reserved suffix, the
+ * IPv4 loopback range (127.0.0.0/8), the IPv6 loopback `::1`, and the
+ * IPv4-mapped IPv6 loopback (::ffff:127.x.x.x). `URL.hostname` reports IPv6
+ * literals with surrounding brackets, which are stripped before matching.
+ *
+ * The preview engine uses this to scope its reachability probe so it never
+ * pings arbitrary remote hosts.
+ */
+export function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '::1') return true;
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  if (/^::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  return false;
+}
+
+/**
+ * Pick a default scheme for a scheme-less input (bare hostname or
+ * protocol-relative). Loopback inputs default to `http:` because local dev
+ * servers are usually plain HTTP; everything else keeps the existing
+ * `https:` default.
+ */
+function defaultSchemeFor(schemeLessInput: string): string {
+  try {
+    const probe = new URL(`https://${schemeLessInput}`);
+    return isLoopbackHostname(probe.hostname) ? 'http:' : 'https:';
+  } catch {
+    // Unparseable input — the subsequent parse in sanitizeUrl will reject it.
+    return 'https:';
+  }
+}
+
 /**
  * Validate and sanitize a URL for use as an iframe src.
  * Returns the original URL if valid, or 'about:blank' if invalid.
  *
- * Rejects dangerous protocols (javascript:, data:, file:, etc.)
- * and empty strings.
+ * Rejects dangerous protocols (javascript:, data:, file:, etc.), URLs that
+ * embed credentials, and empty strings. Scheme-less inputs default to `http:`
+ * for loopback hosts and `https:` otherwise.
  */
 export function sanitizeUrl(url: string): string {
   const trimmed = url.trim();
@@ -147,16 +187,34 @@ export function sanitizeUrl(url: string): string {
     return 'about:blank';
   }
 
-  // Allow protocol-relative URLs and bare hostnames by prepending https:
+  // Allow protocol-relative URLs and bare hostnames by prepending the
+  // appropriate default scheme. Explicitly-typed schemes are preserved.
   let candidate = trimmed;
   if (candidate.startsWith('//')) {
-    candidate = `https:${candidate}`;
+    candidate = candidate.slice(2);
+    candidate = `${defaultSchemeFor(candidate)}//${candidate}`;
   } else if (!candidate.includes('://') && !candidate.startsWith('about:')) {
-    candidate = `https://${candidate}`;
+    candidate = `${defaultSchemeFor(candidate)}//${candidate}`;
   }
 
   try {
     const parsed = new URL(candidate);
+    // Some engines (Chromium) percent-encode whitespace in bare-host inputs,
+    // turning "this is not a url" into a "valid" URL with a percent-encoded
+    // hostname. A hostname containing whitespace (raw or encoded) is never a
+    // real preview target, so reject it explicitly to keep validation
+    // deterministic across engines.
+    if (
+      /\s/.test(parsed.hostname) ||
+      ENCODED_WHITESPACE.test(parsed.hostname)
+    ) {
+      return 'about:blank';
+    }
+    // Embedded credentials are almost never intentional in a preview tool and
+    // risk leaking secrets into shared or persisted state.
+    if (parsed.username !== '' || parsed.password !== '') {
+      return 'about:blank';
+    }
     if (ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
       return parsed.href;
     }

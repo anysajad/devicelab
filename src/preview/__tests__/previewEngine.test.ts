@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getDeviceById } from '@/devices';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../previewUtils';
-import { createPreviewController } from '../previewEngine';
+import {
+  createPreviewController,
+  ERROR_MIXED_CONTENT,
+  formatNotRespondingMessage,
+  formatUnreachableMessage,
+  PREVIEW_LOAD_TIMEOUT_MS,
+} from '../previewEngine';
 
 const iphone15 = getDeviceById('iphone-15')!;
 const desktop1080p = getDeviceById('desktop-1080p')!;
@@ -13,6 +19,11 @@ function makeConfig(url = 'https://example.com') {
     device: iphone15,
     orientation: 'portrait' as const,
   };
+}
+
+/** Flush pending promise microtasks with real timers. */
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe('createPreviewController', () => {
@@ -497,5 +508,276 @@ describe('createPreviewController', () => {
     expect(typeof controller.zoomOut).toBe('function');
     expect(typeof controller.setZoomMode).toBe('function');
     controller.destroy();
+  });
+
+  // --- Localhost reachability / timeout / mixed-content ---
+
+  it('handles insecure http loopback URLs loads without a probe false positive', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig('http://localhost:3000'));
+
+    const iframe = controller.getIframe()!;
+    expect(iframe.src).toContain('http://localhost:3000');
+    expect(controller.getState().lifecycle).toBe('loading');
+
+    controller.destroy();
+  });
+
+  it('rejects embedded credentials at the engine level', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig('http://user:pass@localhost:3000'));
+
+    const iframe = controller.getIframe()!;
+    expect(iframe.src).toContain('about:blank');
+
+    controller.destroy();
+  });
+
+  it('becomes ready when the loaded src differs from the requested URL (redirects)', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig('https://example.com/app'));
+
+    const iframe = controller.getIframe()!;
+    // Simulate a server-side redirect: the final src no longer equals the
+    // requested URL, but a document did load.
+    iframe.src = 'https://example.com/app/login';
+    iframe.dispatchEvent(new Event('load'));
+
+    expect(controller.getState().lifecycle).toBe('ready');
+
+    controller.destroy();
+  });
+
+  it('ignores the initial about:blank load event', () => {
+    const controller = createPreviewController();
+    controller.load(makeConfig('https://example.com'));
+
+    const iframe = controller.getIframe()!;
+    iframe.src = 'about:blank';
+    iframe.dispatchEvent(new Event('load'));
+
+    expect(controller.getState().lifecycle).toBe('loading');
+
+    controller.destroy();
+  });
+
+  it('loopback probe failure surfaces a connection-refused error while loading', async () => {
+    let rejectProbe: (reason?: unknown) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectProbe = reject;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://127.0.0.1:3000/app'));
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:3000/app',
+        expect.objectContaining({ mode: 'no-cors' })
+      );
+
+      rejectProbe(new TypeError('Failed to fetch'));
+      await flushMicrotasks();
+
+      const state = controller.getState();
+      expect(state.lifecycle).toBe('error');
+      expect(state.error).toBe(formatUnreachableMessage('127.0.0.1:3000'));
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a resolving loopback probe does not change lifecycle; the iframe still drives ready', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://localhost:3000'));
+
+      await flushMicrotasks();
+      expect(controller.getState().lifecycle).toBe('loading');
+
+      const iframe = controller.getIframe()!;
+      iframe.dispatchEvent(new Event('load'));
+      expect(controller.getState().lifecycle).toBe('ready');
+      expect(controller.getState().error).toBeNull();
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a successful iframe load is accepted even if the probe later rejects', async () => {
+    let rejectProbe: (reason?: unknown) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectProbe = reject;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://127.0.0.1:3000/'));
+
+      const iframe = controller.getIframe()!;
+      iframe.dispatchEvent(new Event('load'));
+      expect(controller.getState().lifecycle).toBe('ready');
+
+      // The probe now rejects AFTER the frame loaded — the ready state wins.
+      rejectProbe(new TypeError('Failed to fetch'));
+      await flushMicrotasks();
+
+      const state = controller.getState();
+      expect(state.lifecycle).toBe('ready');
+      expect(state.error).toBeNull();
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not probe non-loopback targets', () => {
+    const fetchMock = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('https://example.com'));
+
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks http loopback targets when the host page is HTTPS (mixed content)', () => {
+    vi.stubGlobal('window', { location: { protocol: 'https:' } });
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://127.0.0.1:3000'));
+
+      const state = controller.getState();
+      expect(state.lifecycle).toBe('error');
+      expect(state.error).toBe(ERROR_MIXED_CONTENT);
+      expect(controller.getIframe()!.src).toContain('about:blank');
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('transitions to error via the load timeout when the frame never loads', () => {
+    vi.useFakeTimers();
+
+    try {
+      const controller = createPreviewController();
+      // Non-loopback: no probe, so the timeout is the only driver.
+      controller.load(makeConfig('https://example.com'));
+      expect(controller.getState().lifecycle).toBe('loading');
+
+      vi.advanceTimersByTime(PREVIEW_LOAD_TIMEOUT_MS);
+
+      const state = controller.getState();
+      expect(state.lifecycle).toBe('error');
+      expect(state.error).toBe(
+        formatNotRespondingMessage('https://example.com')
+      );
+
+      controller.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never times out an empty or invalid URL', () => {
+    vi.useFakeTimers();
+
+    try {
+      const controller = createPreviewController();
+      controller.load({ url: '', device: iphone15, orientation: 'portrait' });
+
+      vi.advanceTimersByTime(PREVIEW_LOAD_TIMEOUT_MS * 2);
+
+      expect(controller.getState().lifecycle).toBe('loading');
+
+      controller.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reload() restarts a fresh loading cycle after a probe failure', async () => {
+    let rejectProbe: (reason?: unknown) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectProbe = reject;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://localhost:3000'));
+
+      rejectProbe(new TypeError('Failed to fetch'));
+      await flushMicrotasks();
+      expect(controller.getState().lifecycle).toBe('error');
+
+      controller.reload();
+
+      const state = controller.getState();
+      expect(state.lifecycle).toBe('loading');
+      expect(state.error).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('destroy aborts a pending probe without further state changes', async () => {
+    let rejectProbe: (reason?: unknown) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectProbe = reject;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const controller = createPreviewController();
+      controller.load(makeConfig('http://127.0.0.1:3000/'));
+
+      controller.destroy();
+
+      rejectProbe(new TypeError('Failed to fetch'));
+      await flushMicrotasks();
+
+      // destroy() resets to idle; the late rejection must not resurrect state.
+      expect(controller.getState().lifecycle).toBe('idle');
+
+      controller.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

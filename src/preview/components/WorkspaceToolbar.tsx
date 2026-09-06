@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { getDevicesByCategory } from '@/devices';
 import type { DeviceCategory, DeviceDefinition } from '@/devices';
+import { sanitizeUrl } from '../previewUtils';
 import { usePreviewStore } from '../store/usePreviewStore';
 
 const CATEGORY_LABELS: Record<DeviceCategory, string> = {
@@ -32,6 +33,7 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
   const setInspectionActive = usePreviewStore((s) => s.setInspectionActive);
 
   const [urlInput, setUrlInput] = useState(sharedUrl);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
 
   const grouped = CATEGORY_ORDER.map((cat) => ({
@@ -47,7 +49,20 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
 
   const handleSubmitUrl = useCallback(() => {
     setSharedUrl(urlInput);
+    // Surface invalid input without blocking the submit or the ability to
+    // clear the URL (an empty reset stays valid).
+    const trimmed = urlInput.trim();
+    setUrlError(
+      trimmed !== '' && sanitizeUrl(urlInput) === 'about:blank'
+        ? "That doesn't look like a valid URL."
+        : null
+    );
   }, [urlInput, setSharedUrl]);
+
+  const handleUrlChange = useCallback((value: string) => {
+    setUrlInput(value);
+    setUrlError((prev) => (prev !== null ? null : prev));
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -90,16 +105,27 @@ export function WorkspaceToolbar({ hasEntries }: WorkspaceToolbarProps) {
       aria-label="Workspace controls"
     >
       {/* Shared URL input */}
-      <input
-        type="url"
-        value={urlInput}
-        onChange={(e) => setUrlInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={handleSubmitUrl}
-        placeholder="Enter URL to preview across devices..."
-        className="min-w-[200px] flex-1 rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
-        aria-label="Shared preview URL"
-      />
+      <div className="flex min-w-[200px] flex-1 flex-col">
+        <input
+          type="url"
+          value={urlInput}
+          onChange={(e) => handleUrlChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSubmitUrl}
+          placeholder="Enter URL to preview across devices..."
+          className="rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+          aria-label="Shared preview URL"
+          aria-invalid={urlError !== null}
+        />
+        {urlError && (
+          <p
+            className="mt-1 text-xs text-red-600 dark:text-red-400"
+            role="alert"
+          >
+            {urlError}
+          </p>
+        )}
+      </div>
 
       {/* Separator */}
       <div

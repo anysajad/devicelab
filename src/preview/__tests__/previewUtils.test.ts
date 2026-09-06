@@ -11,6 +11,7 @@ import {
   computeZoom,
   CUSTOM_VIEWPORT_MAX,
   CUSTOM_VIEWPORT_MIN,
+  isLoopbackHostname,
   parseCustomViewport,
   resolveOrientation,
   sanitizeUrl,
@@ -156,8 +157,50 @@ describe('sanitizeUrl', () => {
     expect(sanitizeUrl('http://localhost:5173')).toBe('http://localhost:5173/');
   });
 
-  it('accepts localhost URLs without protocol', () => {
-    expect(sanitizeUrl('localhost:5173')).toBe('https://localhost:5173/');
+  it('defaults scheme-less localhost URLs to http', () => {
+    expect(sanitizeUrl('localhost:5173')).toBe('http://localhost:5173/');
+  });
+
+  it('defaults scheme-less 127.0.0.1 URLs to http', () => {
+    expect(sanitizeUrl('127.0.0.1:5173')).toBe('http://127.0.0.1:5173/');
+  });
+
+  it('defaults scheme-less IPv6 loopback URLs to http', () => {
+    expect(sanitizeUrl('[::1]:4000')).toBe('http://[::1]:4000/');
+  });
+
+  it('defaults scheme-less .localhost subdomains to http', () => {
+    expect(sanitizeUrl('app.localhost:3000')).toBe(
+      'http://app.localhost:3000/'
+    );
+  });
+
+  it('defaults protocol-relative loopback URLs to http', () => {
+    expect(sanitizeUrl('//localhost:3000')).toBe('http://localhost:3000/');
+  });
+
+  it('preserves explicit IPv6 loopback URLs', () => {
+    expect(sanitizeUrl('http://[::1]:4000')).toBe('http://[::1]:4000/');
+  });
+
+  it('defaults scheme-less non-loopback URLs to https', () => {
+    expect(sanitizeUrl('example.com')).toBe('https://example.com/');
+  });
+
+  it('rejects URLs with embedded credentials', () => {
+    expect(sanitizeUrl('http://user:pass@localhost:3000')).toBe('about:blank');
+  });
+
+  it('rejects https URLs with embedded credentials', () => {
+    expect(sanitizeUrl('https://user:pass@example.com')).toBe('about:blank');
+  });
+
+  it('rejects bare hosts containing whitespace', () => {
+    expect(sanitizeUrl('this is not a url')).toBe('about:blank');
+  });
+
+  it('rejects bare hosts containing percent-encoded whitespace', () => {
+    expect(sanitizeUrl('this%20is%20not%20a%20url')).toBe('about:blank');
   });
 
   it('accepts protocol-relative URLs', () => {
@@ -192,6 +235,39 @@ describe('sanitizeUrl', () => {
     expect(sanitizeUrl('https://example.com/path?q=1#hash')).toBe(
       'https://example.com/path?q=1#hash'
     );
+  });
+});
+
+describe('isLoopbackHostname', () => {
+  it('recognizes localhost', () => {
+    expect(isLoopbackHostname('localhost')).toBe(true);
+    expect(isLoopbackHostname('LOCALHOST')).toBe(true);
+  });
+
+  it('recognizes .localhost subdomains', () => {
+    expect(isLoopbackHostname('app.localhost')).toBe(true);
+  });
+
+  it('recognizes IPv4 loopback hosts', () => {
+    expect(isLoopbackHostname('127.0.0.1')).toBe(true);
+    expect(isLoopbackHostname('127.255.1.2')).toBe(true);
+  });
+
+  it('recognizes IPv6 loopback hosts (with and without brackets)', () => {
+    expect(isLoopbackHostname('[::1]')).toBe(true);
+    expect(isLoopbackHostname('::1')).toBe(true);
+  });
+
+  it('recognizes IPv4-mapped IPv6 loopback hosts', () => {
+    expect(isLoopbackHostname('::ffff:127.0.0.1')).toBe(true);
+  });
+
+  it('rejects non-loopback hosts', () => {
+    expect(isLoopbackHostname('example.com')).toBe(false);
+    expect(isLoopbackHostname('notlocalhost')).toBe(false);
+    expect(isLoopbackHostname('127.example.com')).toBe(false);
+    expect(isLoopbackHostname('128.0.0.1')).toBe(false);
+    expect(isLoopbackHostname('[::2]')).toBe(false);
   });
 });
 
